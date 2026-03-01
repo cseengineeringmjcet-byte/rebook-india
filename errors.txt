@@ -1,0 +1,2 @@
+app/vendor/[id]/page.tsx(80,49): error TS2339: Property 'phone' does not exist on type 'Vendor'.
+app/wishlist/page.tsx(14,13): error TS2339: Property 'items' does not exist on type 'WishlistState'.
