@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper to check if user owns the document
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    // For the admin panel to work with hardcoded credentials and onSnapshot
+    // we allow global read access for now. In production, this should be replaced
+    // with Firebase Auth Custom Claims for admins.
+    
+    match /{document=**} {
+      allow read: if true;
+    }
+
+    // Books — anyone can read, only authenticated can write
+    match /books/{bookId} {
+      allow write: if isAuth();
+    }
+
+    // Vendors — anyone can read
+    match /vendors/{vendorId} {
+      allow write: if isAuth();
+    }
+
+    // Categories — anyone can read
+    match /categories/{categoryId} {
+      allow write: if isAuth();
+    }
+
+    // Users — users can read and write their own data
+    match /users/{userId} {
+      allow write: if isOwner(userId) || true; // Relaxed for admin panel updates
+    }
+
+    // Orders — users can read and create their own orders
+    match /orders/{orderId} {
+      allow create: if isAuth();
+      allow update: if true; // Relaxed for admin panel to approve/cancel
+    }
+
+    // Cart — users can manage their own cart
+    match /cart/{cartId} {
+      allow write: if isAuth() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuth();
+    }
+
+    // Wishlist — users can manage their own wishlist
+    match /wishlist/{wishlistId} {
+      allow write: if isAuth() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuth();
+    }
+
+    // Book listings — sellers can manage their own listings
+    match /book_listings/{listingId} {
+      allow create: if isAuth();
+      allow update: if true; // Relaxed for admin panel to approve
+    }
+
+    // Addresses — users manage their own
+    match /addresses/{addressId} {
+      allow write: if isAuth() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuth();
+    }
+
+    // Reviews — anyone can read approved reviews
+    match /reviews/{reviewId} {
+      allow create: if isAuth();
+    }
+
+    // Notifications — users read their own
+    match /notifications/{notifId} {
+      allow write: if isAuth() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuth();
+    }
+  }
+}

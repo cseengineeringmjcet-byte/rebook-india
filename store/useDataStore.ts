@@ -6,12 +6,12 @@ interface DataState {
     books: Book[];
     vendors: Vendor[];
     isLoaded: boolean;
-    setSupabaseData: (books: Book[], vendors: Vendor[]) => void;
+    setFirebaseData: (books: Book[], vendors: Vendor[]) => void;
 }
 
 export const useDataStore = create<DataState>((set) => ({
     books: [],
     vendors: [],
     isLoaded: false,
-    setSupabaseData: (books, vendors) => set({ books, vendors, isLoaded: true })
+    setFirebaseData: (books, vendors) => set({ books, vendors, isLoaded: true })
 }));

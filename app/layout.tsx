@@ -7,9 +7,9 @@ import SearchOverlay from '@/components/SearchOverlay';
 import MobileMenu from '@/components/MobileMenu';
 import WaFloat from '@/components/WaFloat';
 import { Toaster } from 'sonner';
-
-import SupabaseDataLoader from '@/components/SupabaseDataLoader';
-import { fetchInitialData } from '@/lib/fetchData';
+import AuthInit from '@/components/AuthInit';
+import FirebaseDataLoader from '@/components/FirebaseDataLoader';
+import { getAdminBooks, getAdminVendors } from '@/lib/firebase/admin';
 
 export const metadata: Metadata = {
   title: 'Rebook India | Hyderabad\'s Trusted Second-Hand Book Marketplace',
@@ -21,14 +21,14 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-
-  // Fetch from Supabase natively (with safe fallback)
-  const { books, vendors } = await fetchInitialData();
+  const books = await getAdminBooks();
+  const vendors = await getAdminVendors();
 
   return (
     <html lang="en">
-      <body className="flex flex-col min-h-screen">
-        <SupabaseDataLoader books={books} vendors={vendors}>
+      <body className="flex flex-col min-h-screen" suppressHydrationWarning>
+        <AuthInit />
+        <FirebaseDataLoader books={books} vendors={vendors}>
           <Navbar />
           <SearchOverlay />
           <CartSidebar />
@@ -39,7 +39,7 @@ export default async function RootLayout({
           <Footer />
           <WaFloat />
           <Toaster position="bottom-right" className="md:bottom-right bottom-center md:mb-0 mb-4 px-4" />
-        </SupabaseDataLoader>
+        </FirebaseDataLoader>
       </body>
     </html>
   );

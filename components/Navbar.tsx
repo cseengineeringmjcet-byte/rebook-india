@@ -50,6 +50,9 @@ export default function Navbar() {
                     <Link href="/sell" className={`text-sm font-medium hover:text-[var(--color-rust)] transition-colors ${pathname === '/sell' ? 'text-[var(--color-rust)]' : 'text-[var(--color-cream)]'}`}>
                         Sell Books
                     </Link>
+                    <Link href="/faq" className={`text-sm font-medium hover:text-[var(--color-rust)] transition-colors ${pathname === '/faq' ? 'text-[var(--color-rust)]' : 'text-[var(--color-cream)]'}`}>
+                        FAQ
+                    </Link>
                     <a href="/#calculator" className="text-sm font-medium text-[var(--color-cream)] hover:text-[var(--color-rust)] transition-colors">
                         Pricing
                     </a>

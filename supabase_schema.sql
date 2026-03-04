@@ -55,7 +55,8 @@ INSERT INTO categories (id, name, slug) VALUES
   (gen_random_uuid(), 'Self-Help', 'selfhelp'),
   (gen_random_uuid(), 'Fiction', 'fiction'),
   (gen_random_uuid(), 'Regional Languages', 'regional');
-
+  (gen_random_uuid(), 'URDU ADABI BOOKS', 'urdu');
+  (gen_random_uuid(), 'ARABIC BOOKS', 'Arabic');
 CREATE TABLE books (
   id UUID PRIMARY KEY,
   title TEXT,

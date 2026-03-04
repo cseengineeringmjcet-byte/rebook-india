@@ -89,7 +89,7 @@ export default function SearchOverlay() {
                                 className="flex items-center gap-4 p-3 bg-white/5 hover:bg-white/10 rounded-sm transition-colors group"
                             >
                                 <div className="w-12 flex-shrink-0">
-                                    <BookCoverImage book={book} />
+                                    <BookCoverImage isbn={book.isbn || ''} title={book.title} category={book.category || (book as any).category_id} coverUrl={(book as any).cover_url || (book as any).coverUrl} />
                                 </div>
                                 <div className="flex-1">
                                     <div className="text-white font-display font-bold group-hover:text-[var(--color-amber)] transition-colors">

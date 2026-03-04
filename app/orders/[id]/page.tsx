@@ -3,38 +3,40 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/store/useAuth';
 import { ArrowLeft, MessageCircle, Copy, Check, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/lib/firebase/config';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export default function OrderDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const { isLoggedIn } = useAuth();
+    const { isLoggedIn, isLoading } = useAuth();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!isLoggedIn) {
+        if (!isLoading && !isLoggedIn) {
             router.push('/auth');
             return;
         }
-        if (params.id) fetchOrder(params.id as string);
-    }, [params.id, isLoggedIn, router]);
+        if (isLoggedIn && params.id) fetchOrder(params.id as string);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [params.id, isLoggedIn, isLoading]);
 
     const fetchOrder = async (id: string) => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('orders')
-                .select('*')
-                .eq('id', id)
-                .single();
+            const docRef = doc(db, 'orders', id);
+            const docSnap = await getDoc(docRef);
 
-            if (data) setOrder(data);
-            if (error) console.error(error);
+            if (docSnap.exists()) {
+                setOrder({ id: docSnap.id, ...docSnap.data() });
+            } else {
+                console.error("Order not found");
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -52,12 +54,9 @@ export default function OrderDetailPage() {
     const handleCancel = async () => {
         if (!window.confirm("Are you sure you want to cancel this order?")) return;
         try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'cancelled' })
-                .eq('id', order.id);
+            const docRef = doc(db, 'orders', order.id);
+            await updateDoc(docRef, { status: 'cancelled' });
 
-            if (error) throw error;
             toast.success("Order cancelled successfully");
             fetchOrder(order.id);
         } catch {

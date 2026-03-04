@@ -1,0 +1,33 @@
+const fetchData = async () => {
+        setStatsLoading(true);
+        setOrdersLoading(true);
+        try {
+            const p1 = adminSupabase.from("orders").select("*", { count: "exact", head: true });
+            const p2 = adminSupabase.from("orders").select("*", { count: "exact", head: true }).eq("status", "placed");
+            const p3 = adminSupabase.from("books").select("*", { count: "exact", head: true }).eq("is_available", true);
+            const p4 = adminSupabase.from("vendors").select("*", { count: "exact", head: true });
+            const p5 = adminSupabase.from("book_listings").select("*", { count: "exact", head: true }).eq("status", "pending");
+            const p6 = adminSupabase.from("users").select("*", { count: "exact", head: true });
+
+            const { data: recent } = await adminSupabase.from("orders").select("*, users(full_name)").order("placed_at", { ascending: false }).limit(10);
+            const { data: allOrd } = await adminSupabase.from("orders").select("*, users(full_name, phone)").order("placed_at", { ascending: false });
+
+            const [r1, r2, r3, r4, r5, r6] = await Promise.all([p1, p2, p3, p4, p5, p6]);
+
+            setStats({
+                totalOrders: r1.count || 0,
+                pendingOrders: r2.count || 0,
+                totalBooks: r3.count || 0,
+                totalVendors: r4.count || 0,
+                pendingListings: r5.count || 0,
+                totalUsers: r6.count || 0,
+            });
+
+            if (recent) setRecentOrders(recent);
+            if (allOrd) setAllOrders(allOrd);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setStatsLoading(false);
+            setOrdersLoading(false);
+        }

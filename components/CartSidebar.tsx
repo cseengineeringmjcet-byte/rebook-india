@@ -65,7 +65,7 @@ export default function CartSidebar() {
                         items.map((item) => (
                             <div key={item.cartItemId} className="flex gap-3 bg-white p-2 rounded-sm shadow-sm border border-[var(--color-ldust)]">
                                 <div className="w-[50px] shrink-0">
-                                    <BookCoverImage book={item} />
+                                    <BookCoverImage isbn={item.isbn || ''} title={item.title} category={item.category || (item as any).category_id} coverUrl={(item as any).cover_url || (item as any).coverUrl} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <Link href={`/book/${item.id}`} onClick={closeCart} className="hover:text-[var(--color-rust)] block">

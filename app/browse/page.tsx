@@ -1,337 +1,708 @@
-"use client";
+'use client'
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useDataStore } from '@/store/useDataStore';
-import BookCoverImage from '@/components/BookCoverImage';
-import { Heart, SlidersHorizontal, MapPin, MessageCircle, X, Check } from 'lucide-react';
-import { useWishlist } from '@/store/useWishlist';
-import { useCart } from '@/store/useCart';
-import { waBook } from '@/lib/whatsapp';
-import { toast } from 'sonner';
-import Link from 'next/link';
+import React, { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { initializeApp, getApps, getApp } from 'firebase/app'
+import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore'
+import { Heart, SlidersHorizontal, MessageCircle, X, Check, Search } from 'lucide-react'
+import { useWishlist } from '@/store/useWishlist'
+import { useCart } from '@/store/useCart'
+import { toast } from 'sonner'
 
-const CATEGORIES = [
-    'engineering', 'medical', 'jee', 'neet', 'upsc', 'bank', 'science',
-    'secondary', 'school', 'mba', 'ca', 'law', 'selfhelp', 'fiction', 'regional'
-];
+// ── Firebase ─────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+    apiKey: 'AIzaSyDAwlYwWmuBEUxS9p-jxp_9KgVAE79fepI',
+    authDomain: 'rebookindia-29be8.firebaseapp.com',
+    projectId: 'rebookindia-29be8',
+    storageBucket: 'rebookindia-29be8.firebasestorage.app',
+    messagingSenderId: '1014316461662',
+    appId: '1:1014316461662:web:5c5b3037f031d50cabcecf',
+}
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
+const db = getFirestore(app)
 
-const CONDITIONS = ['all', 'like_new', 'good', 'fair', 'acceptable'];
+// ── Constants ─────────────────────────────────────────────────────────────────
+const CATEGORY_OPTIONS = [
+    { value: '', label: 'All Categories' },
+    { value: 'engineering', label: 'B.Tech Engineering' },
+    { value: 'medical', label: 'MBBS Medical' },
+    { value: 'jee', label: 'JEE Mains & Advanced' },
+    { value: 'neet', label: 'NEET UG' },
+    { value: 'upsc', label: 'UPSC Civil Services' },
+    { value: 'bank', label: 'Bank PO & SSC' },
+    { value: 'science', label: 'Class 11-12 Science' },
+    { value: 'secondary', label: 'Class 9-10 CBSE' },
+    { value: 'school', label: 'Class 1-8 School' },
+    { value: 'mba', label: 'MBA & CAT' },
+    { value: 'ca', label: 'CA & CMA' },
+    { value: 'law', label: 'Law & CLAT' },
+    { value: 'selfhelp', label: 'Self-Help & Business' },
+    { value: 'fiction', label: 'Fiction & Literature' },
+    { value: 'regional', label: 'Telugu & Regional' },
+]
 
-function BrowseContent() {
-    const { books, vendors } = useDataStore();
-    const searchParams = useSearchParams();
+const CONDITION_OPTIONS = [
+    { value: '', label: 'Any Condition' },
+    { value: 'like_new', label: 'Like New' },
+    { value: 'good', label: 'Good' },
+    { value: 'fair', label: 'Fair' },
+    { value: 'acceptable', label: 'Acceptable' },
+]
 
-    const initialCat = searchParams.get('cat') || '';
-    const initialQ = searchParams.get('q') || '';
+const SORT_OPTIONS = [
+    { value: 'latest', label: 'Latest' },
+    { value: 'price_asc', label: 'Price: Low to High' },
+    { value: 'price_desc', label: 'Price: High to Low' },
+]
 
-    const [searchQuery, setSearchQuery] = useState(initialQ);
-    const [selectedCats, setSelectedCats] = useState<string[]>(initialCat ? [initialCat] : []);
-    const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
-    const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
-    const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
-    const [sort, setSort] = useState('newest');
+// ── Gradients ─────────────────────────────────────────────────────────────────
+const GRADIENTS: Record<string, [string, string, string]> = {
+    engineering: ['#1a3a6e', '#2d6abf', '⚙️'],
+    medical: ['#0d5c3c', '#1a8f5e', '🏥'],
+    jee: ['#6b1a1a', '#c0392b', '⚡'],
+    neet: ['#4a0d6b', '#8e44ad', '🔬'],
+    upsc: ['#2c1a6e', '#6c3fb5', '🏛️'],
+    bank: ['#1a4a6e', '#2980b9', '🏦'],
+    science: ['#0d4a5c', '#16a085', '🧪'],
+    secondary: ['#4a3000', '#e67e22', '📖'],
+    school: ['#2d5c3e', '#4A7C59', '🎒'],
+    mba: ['#2c3e50', '#34495e', '💼'],
+    ca: ['#1a3a2c', '#2e7d5e', '📊'],
+    law: ['#3a1a0d', '#8B4513', '⚖️'],
+    selfhelp: ['#7d2d00', '#C94A2D', '💡'],
+    fiction: ['#1a1208', '#8B7355', '📝'],
+    regional: ['#4a1a6e', '#9b59b6', '🌸'],
+    default: ['#8B7355', '#C94A2D', '📚'],
+}
 
-    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+// ── AI category cover images (generated, served from /public/category-covers/)
+const AI_COVERS: Record<string, string> = {
+    engineering: '/category-covers/engineering.png',
+    medical: '/category-covers/medical.png',
+    jee: '/category-covers/jee.png',
+    neet: '/category-covers/neet.png',
+    upsc: '/category-covers/upsc.png',
+    bank: '/category-covers/bank.png',
+    science: '/category-covers/science.png',
+    secondary: '/category-covers/secondary.png',
+    school: '/category-covers/school.png',
+    mba: '/category-covers/mba.png',
+    ca: '/category-covers/ca.png',
+    law: '/category-covers/law.png',
+    selfhelp: '/category-covers/selfhelp.png',
+    fiction: '/category-covers/fiction.png',
+    regional: '/category-covers/regional.png',
+    default: '/category-covers/default.png',
+}
 
-    const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
-    const { addItem: addCart, hasItem } = useCart();
+// ── Book Cover with 4-priority fallback ───────────────────────────────────────
+function BookCover({ book }: { book: any }) {
+    const catKey = book.category_id ?? book.category ?? 'default'
+    const [c1, c2, emoji] = GRADIENTS[catKey] ?? GRADIENTS.default
+    const aiCover = AI_COVERS[catKey] ?? AI_COVERS.default
 
-    // Debounce search update
-    useEffect(() => {
-        const t = setTimeout(() => {
-            // update URL without full page reload
-            const params = new URLSearchParams(searchParams.toString());
-            if (searchQuery) params.set('q', searchQuery);
-            else params.delete('q');
-            window.history.replaceState(null, '', `?${params.toString()}`);
-        }, 500);
-        return () => clearTimeout(t);
-    }, [searchQuery, searchParams]);
+    // Priority 1: Firebase Storage photo_url (student uploaded) — NEVER overridden
+    // Priority 2: Open Library ISBN cover
+    // Priority 3: AI-generated category image ← NEW
+    // Priority 4: Gradient with emoji (absolute last resort)
 
-    // Client-side filtering
-    const filtered = books.filter(b => {
-        const matchQ = !searchQuery ||
-            b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            b.author.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchCat = selectedCats.length === 0 || selectedCats.includes(b.category);
-        const matchCond = selectedConditions.length === 0 || selectedConditions.includes('all') || selectedConditions.includes(b.condition);
-        const matchVen = selectedVendors.length === 0 || selectedVendors.includes(b.vendorId);
-        const matchPrice = b.ourPrice >= priceRange[0] && b.ourPrice <= priceRange[1];
-        return matchQ && matchCat && matchCond && matchVen && matchPrice;
-    });
+    const buildUrls = () => {
+        const list: string[] = []
+        if (book.photo_url?.startsWith('https://firebasestorage.googleapis.com')) {
+            list.push(book.photo_url)
+        }
+        if (book.isbn) {
+            list.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`)
+            list.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`)
+        }
+        if (book.cover_url?.startsWith('http')) list.push(book.cover_url)
+        // Priority 3: AI category cover
+        list.push(aiCover)
+        return list
+    }
 
-    // Sorting
-    filtered.sort((a, b) => {
-        if (sort === 'price_asc') return a.ourPrice - b.ourPrice;
-        if (sort === 'price_desc') return b.ourPrice - a.ourPrice;
-        return 0; // newest default (array order)
-    });
+    const urls = buildUrls()
+    const [idx, setIdx] = useState(0)
+    const [failed, setFailed] = useState(false)
 
-    const toggleFilter = (list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
-        setList(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
-    };
+    const advance = () => {
+        if (idx + 1 < urls.length) setIdx(idx + 1)
+        else setFailed(true)
+    }
 
-    const renderSidebar = () => (
-        <div className="space-y-8">
-            <div>
-                <h4 className="font-display font-bold text-[var(--color-ink)] mb-3">Categories</h4>
-                <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
-                    {CATEGORIES.map(c => (
-                        <label key={c} className="flex items-center gap-2 text-sm text-[var(--color-dust)] cursor-pointer hover:text-[var(--color-ink)]">
-                            <input
-                                type="checkbox"
-                                checked={selectedCats.includes(c)}
-                                onChange={() => toggleFilter(selectedCats, setSelectedCats, c)}
-                                className="rounded-sm border-[var(--color-ldust)] text-[var(--color-rust)] focus:ring-[var(--color-rust)]"
-                            />
-                            <span className="capitalize">{c.replace('_', ' ')}</span>
-                        </label>
-                    ))}
-                </div>
+    // Open Library returns a 1×1 pixel placeholder instead of 404 for missing covers
+    const onLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        if (e.currentTarget.naturalWidth < 10 || e.currentTarget.naturalHeight < 10) advance()
+    }
+
+    // Priority 4: absolute last resort — gradient card
+    if (failed) {
+        return (
+            <div style={{
+                width: '100%', height: '100%',
+                background: `linear-gradient(135deg,${c1},${c2})`,
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: 10, boxSizing: 'border-box',
+            }}>
+                <span style={{ fontSize: 30, marginBottom: 8 }}>{emoji}</span>
+                <p style={{
+                    color: 'rgba(255,255,255,0.95)', fontSize: 9,
+                    fontWeight: 700, textAlign: 'center',
+                    lineHeight: 1.3, margin: 0,
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 4,
+                    WebkitBoxOrient: 'vertical',
+                }}>
+                    {book.title}
+                </p>
             </div>
-
-            <div>
-                <h4 className="font-display font-bold text-[var(--color-ink)] mb-3">Condition</h4>
-                <div className="space-y-2">
-                    {CONDITIONS.map(c => (
-                        <label key={c} className="flex items-center gap-2 text-sm text-[var(--color-dust)] cursor-pointer hover:text-[var(--color-ink)]">
-                            <input
-                                type="radio"
-                                name="condition"
-                                checked={selectedConditions.includes(c)}
-                                onChange={() => {
-                                    setSelectedConditions(prev => prev.includes(c) ? [] : [c]);
-                                }}
-                                onClick={() => {
-                                    if (selectedConditions.includes(c)) {
-                                        // allow uncheck radio
-                                        setSelectedConditions([]);
-                                    }
-                                }}
-                                className="border-[var(--color-ldust)] text-[var(--color-rust)] focus:ring-[var(--color-rust)]"
-                            />
-                            <span className="capitalize">{c.replace('_', ' ')}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            <div>
-                <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-display font-bold text-[var(--color-ink)]">Price Range</h4>
-                </div>
-                <div className="relative h-2 bg-[var(--color-ldust)] rounded-lg text-center font-bold text-xs text-[var(--color-ink)] pt-1 mb-8">
-                    ₹{priceRange[0]} - ₹{priceRange[1]}
-                </div>
-                <div className="relative mt-4">
-                    <input
-                        type="range" min="0" max="5000" step="50"
-                        value={priceRange[0]} onChange={e => setPriceRange([Math.min(Number(e.target.value), priceRange[1]), priceRange[1]])}
-                        className="absolute w-full h-2 bg-transparent pointer-events-none appearance-none cursor-pointer accent-[var(--color-rust)] dual-slider z-20"
-                        style={{ pointerEvents: 'none' }}
-                    />
-                    <input
-                        type="range" min="0" max="5000" step="50"
-                        value={priceRange[1]} onChange={e => setPriceRange([priceRange[0], Math.max(Number(e.target.value), priceRange[0])])}
-                        className="absolute w-full h-2 bg-transparent pointer-events-none appearance-none cursor-pointer accent-[var(--color-rust)] dual-slider z-20"
-                        style={{ pointerEvents: 'none' }}
-                    />
-                    <div className="w-full h-2 bg-[var(--color-ldust)] rounded-lg absolute inset-0 z-0"></div>
-                </div>
-                <style dangerouslySetInnerHTML={{
-                    __html: `
-                    .dual-slider::-webkit-slider-thumb { pointer-events: auto; }
-                    .dual-slider::-moz-range-thumb { pointer-events: auto; }
-                `}} />
-            </div>
-
-            <div>
-                <h4 className="font-display font-bold text-[var(--color-ink)] mb-3">Vendors</h4>
-                <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {vendors.map(v => (
-                        <label key={v.id} className="flex items-center gap-2 text-sm text-[var(--color-dust)] cursor-pointer hover:text-[var(--color-ink)]">
-                            <input
-                                type="checkbox"
-                                checked={selectedVendors.includes(v.id)}
-                                onChange={() => toggleFilter(selectedVendors, setSelectedVendors, v.id)}
-                                className="rounded-sm border-[var(--color-ldust)] text-[var(--color-rust)] focus:ring-[var(--color-rust)]"
-                            />
-                            <span className="flex-1 truncate">{v.shopName}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
+        )
+    }
 
     return (
-        <div className="bg-[var(--color-cream)] min-h-screen py-8">
-            <div className="max-w-7xl mx-auto px-4">
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+            src={urls[idx]}
+            alt={book.title}
+            onError={advance}
+            onLoad={onLoad}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+    )
+}
 
-                {/* Top Bar */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                    <div className="flex-1 relative max-w-xl">
-                        <input
-                            type="text"
-                            placeholder="Search books..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full pl-4 pr-10 py-3 bg-white border border-[var(--color-ldust)] rounded-sm focus:outline-none focus:border-[var(--color-rust)] shadow-sm"
-                        />
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm font-bold text-[var(--color-dust)] hidden md:inline-block">
-                            {filtered.length} books found
-                        </span>
-                        <select
-                            value={sort} onChange={e => setSort(e.target.value)}
-                            className="bg-white border border-[var(--color-ldust)] rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-[var(--color-rust)] shadow-sm text-[var(--color-ink)]"
-                        >
-                            <option value="newest">Newest First</option>
-                            <option value="price_asc">Price Low to High</option>
-                            <option value="price_desc">Price High to Low</option>
-                        </select>
-                        <button
-                            onClick={() => setMobileFiltersOpen(true)}
-                            className="md:hidden bg-[var(--color-ink)] text-white p-3 rounded-sm shadow-sm"
-                        >
-                            <SlidersHorizontal size={20} />
-                        </button>
+// ── Loading Skeleton ──────────────────────────────────────────────────────────
+function Skeleton() {
+    return (
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: 16,
+        }}>
+            {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} style={{ background: 'white', borderRadius: 8, overflow: 'hidden' }}>
+                    <div style={{ aspectRatio: '0.72', background: '#D4C5A9', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                    <div style={{ padding: 12 }}>
+                        <div style={{ height: 10, background: '#D4C5A9', borderRadius: 4, marginBottom: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        <div style={{ height: 8, background: '#D4C5A9', borderRadius: 4, width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }} />
                     </div>
                 </div>
+            ))}
+        </div>
+    )
+}
 
-                <div className="flex items-start gap-8">
+// ── WhatsApp helper ───────────────────────────────────────────────────────────
+function waLink(book: any) {
+    const text = `Hi Rebook India! I want to buy:\n\n*${book.title}* by ${book.author}\n🛒 Price: ₹${book.our_price ?? book.ourPrice} (MRP ₹${book.mrp})\n\nCan you confirm availability?`
+    return `https://wa.me/919876543210?text=${encodeURIComponent(text)}`
+}
+
+// ── Main Browse Content ───────────────────────────────────────────────────────
+function BrowseContent() {
+    const searchParams = useSearchParams()
+    const { toggle: toggleWishlist, has: hasWishlist } = useWishlist()
+    const { addItem: addCart, hasItem } = useCart()
+
+    const [allBooks, setAllBooks] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState('')
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+
+    // Filters
+    const [search, setSearch] = useState(searchParams.get('q') || '')
+    const [category, setCategory] = useState(searchParams.get('cat') || '')
+    const [condition, setCondition] = useState('')
+    const [minPrice, setMinPrice] = useState('')
+    const [maxPrice, setMaxPrice] = useState('')
+    const [sort, setSort] = useState('latest')
+
+    // Fetch all available books once
+    useEffect(() => {
+        const fetchBooks = async () => {
+            setLoading(true)
+            setError('')
+            try {
+                const snap = await getDocs(
+                    query(collection(db, 'books'), where('is_available', '==', true))
+                )
+                setAllBooks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+            } catch (err: any) {
+                console.error('Browse fetch error:', err)
+                setError(err.message || 'Failed to load books')
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchBooks()
+    }, [])
+
+    // Filter + sort
+    const filtered = allBooks
+        .filter(b => {
+            const q = search.toLowerCase()
+            const matchSearch = !q ||
+                (b.title ?? '').toLowerCase().includes(q) ||
+                (b.author ?? '').toLowerCase().includes(q) ||
+                (b.isbn ?? '').toLowerCase().includes(q)
+            const matchCat = !category || (b.category_id ?? b.category) === category
+            const matchCond = !condition || b.condition === condition
+            const price = b.our_price ?? b.ourPrice ?? 0
+            const matchMin = !minPrice || price >= Number(minPrice)
+            const matchMax = !maxPrice || price <= Number(maxPrice)
+            return matchSearch && matchCat && matchCond && matchMin && matchMax
+        })
+        .sort((a, b) => {
+            const pa = a.our_price ?? a.ourPrice ?? 0
+            const pb = b.our_price ?? b.ourPrice ?? 0
+            if (sort === 'price_asc') return pa - pb
+            if (sort === 'price_desc') return pb - pa
+            return 0 // latest = Firestore order
+        })
+
+    const clearFilters = () => {
+        setSearch(''); setCategory(''); setCondition('')
+        setMinPrice(''); setMaxPrice(''); setSort('latest')
+    }
+
+    // ── Filters panel (reused for desktop sidebar + mobile sheet)
+    const FiltersPanel = () => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* Search */}
+            <div>
+                <label style={{ display: 'block', fontWeight: 700, color: '#1A1208', fontSize: 13, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Search
+                </label>
+                <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#8B7355' }} />
+                    <input
+                        type="text"
+                        placeholder="Title, author, ISBN..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{
+                            width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 10, paddingBottom: 10,
+                            border: '1px solid #D4C5A9', borderRadius: 6, fontSize: 13, outline: 'none',
+                            fontFamily: 'DM Sans, sans-serif', boxSizing: 'border-box',
+                        }}
+                    />
+                </div>
+            </div>
+
+            {/* Category */}
+            <div>
+                <label style={{ display: 'block', fontWeight: 700, color: '#1A1208', fontSize: 13, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Category
+                </label>
+                <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    style={{
+                        width: '100%', padding: '10px 12px', border: '1px solid #D4C5A9',
+                        borderRadius: 6, fontSize: 13, outline: 'none',
+                        fontFamily: 'DM Sans, sans-serif', background: 'white', color: '#1A1208',
+                    }}
+                >
+                    {CATEGORY_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Condition */}
+            <div>
+                <label style={{ display: 'block', fontWeight: 700, color: '#1A1208', fontSize: 13, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Condition
+                </label>
+                <select
+                    value={condition}
+                    onChange={e => setCondition(e.target.value)}
+                    style={{
+                        width: '100%', padding: '10px 12px', border: '1px solid #D4C5A9',
+                        borderRadius: 6, fontSize: 13, outline: 'none',
+                        fontFamily: 'DM Sans, sans-serif', background: 'white', color: '#1A1208',
+                    }}
+                >
+                    {CONDITION_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Price Range */}
+            <div>
+                <label style={{ display: 'block', fontWeight: 700, color: '#1A1208', fontSize: 13, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Price Range (₹)
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: '#8B7355', fontFamily: 'DM Sans, sans-serif' }}>Min price</span>
+                        <input
+                            type="number"
+                            placeholder="e.g. 100"
+                            value={minPrice}
+                            onChange={e => setMinPrice(e.target.value)}
+                            style={{
+                                width: '100%', padding: '9px 10px', border: '1px solid #D4C5A9',
+                                borderRadius: 6, fontSize: 13, outline: 'none',
+                                fontFamily: 'DM Sans, sans-serif', boxSizing: 'border-box',
+                            }}
+                        />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: '#8B7355', fontFamily: 'DM Sans, sans-serif' }}>Max price</span>
+                        <input
+                            type="number"
+                            placeholder="e.g. 2000"
+                            value={maxPrice}
+                            onChange={e => setMaxPrice(e.target.value)}
+                            style={{
+                                width: '100%', padding: '9px 10px', border: '1px solid #D4C5A9',
+                                borderRadius: 6, fontSize: 13, outline: 'none',
+                                fontFamily: 'DM Sans, sans-serif', boxSizing: 'border-box',
+                            }}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Clear */}
+            <button
+                onClick={clearFilters}
+                style={{
+                    width: '100%', padding: '10px', border: '1px solid #D4C5A9',
+                    borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'DM Sans, sans-serif', background: 'white', color: '#8B7355',
+                }}
+            >
+                Clear All Filters
+            </button>
+        </div>
+    )
+
+    return (
+        <div style={{ minHeight: '100vh', background: '#FAF6EC', padding: '32px 0' }}>
+            <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
+
+                {/* Page heading */}
+                <div style={{ marginBottom: 24 }}>
+                    <h1 style={{
+                        fontFamily: 'Playfair Display, serif', fontSize: 28,
+                        fontWeight: 900, color: '#1A1208', marginBottom: 4,
+                    }}>
+                        Browse Books
+                    </h1>
+                    {!loading && (
+                        <p style={{ color: '#8B7355', fontFamily: 'DM Sans, sans-serif', fontSize: 14 }}>
+                            Showing <strong style={{ color: '#1A1208' }}>{filtered.length}</strong> book{filtered.length !== 1 ? 's' : ''} available in Hyderabad
+                        </p>
+                    )}
+                </div>
+
+                {/* Top bar: Sort + Mobile filter button */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginBottom: 24 }}>
+                    <select
+                        value={sort}
+                        onChange={e => setSort(e.target.value)}
+                        style={{
+                            padding: '10px 14px', border: '1px solid #D4C5A9',
+                            borderRadius: 6, fontSize: 13, fontWeight: 700,
+                            fontFamily: 'DM Sans, sans-serif', background: 'white', color: '#1A1208',
+                            outline: 'none', cursor: 'pointer',
+                        }}
+                    >
+                        {SORT_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={() => setMobileFiltersOpen(true)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '10px 16px', background: '#1A1208', color: 'white',
+                            border: 'none', borderRadius: 6, cursor: 'pointer',
+                            fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: 13,
+                        }}
+                    >
+                        <SlidersHorizontal size={16} /> Filters
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+
                     {/* Desktop Sidebar */}
-                    <div className="hidden md:block w-64 shrink-0 bg-white p-6 shadow-sm border border-[var(--color-ldust)] rounded-sm sticky top-24">
-                        <h3 className="font-display font-black text-xl text-[var(--color-ink)] mb-6 flex items-center gap-2 border-b border-[var(--color-ldust)] pb-4">
-                            <SlidersHorizontal size={20} />
-                            Filters
+                    <div style={{
+                        width: 260, flexShrink: 0,
+                        background: 'white', borderRadius: 12, padding: 24,
+                        boxShadow: '0 2px 8px rgba(26,18,8,0.08)',
+                        position: 'sticky', top: 88,
+                    }}
+                        className="hidden-on-mobile"
+                    >
+                        <h3 style={{
+                            fontFamily: 'Playfair Display, serif', fontWeight: 700,
+                            fontSize: 16, color: '#1A1208', marginBottom: 20,
+                            paddingBottom: 12, borderBottom: '1px solid #D4C5A9',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                        }}>
+                            <SlidersHorizontal size={16} /> Filters
                         </h3>
-                        {renderSidebar()}
+                        <FiltersPanel />
                     </div>
 
-                    {/* Grid */}
-                    <div className="flex-1">
-                        {filtered.length === 0 ? (
-                            <div className="bg-white p-12 text-center rounded-sm border border-[var(--color-ldust)] shadow-sm">
-                                <div className="text-4xl mb-4">📚</div>
-                                <h3 className="font-display font-bold text-xl text-[var(--color-ink)]">No books match your filters</h3>
-                                <p className="text-[var(--color-dust)] mt-2 mb-6">Try relaxing your search or category filters.</p>
+                    {/* Book Grid */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        {loading && <Skeleton />}
+
+                        {error && !loading && (
+                            <div style={{
+                                background: '#fee2e2', border: '1px solid #fca5a5',
+                                borderRadius: 12, padding: 32, textAlign: 'center',
+                            }}>
+                                <p style={{ color: '#991b1b', fontFamily: 'DM Sans, sans-serif', fontSize: 15, marginBottom: 12 }}>
+                                    ❌ {error}
+                                </p>
+                            </div>
+                        )}
+
+                        {!loading && !error && filtered.length === 0 && (
+                            <div style={{
+                                background: 'white', borderRadius: 12, padding: '60px 32px',
+                                textAlign: 'center', boxShadow: '0 2px 8px rgba(26,18,8,0.08)',
+                            }}>
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>📚</div>
+                                <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#1A1208', marginBottom: 8 }}>
+                                    No books found
+                                </h3>
+                                <p style={{ color: '#8B7355', fontFamily: 'DM Sans, sans-serif', marginBottom: 24 }}>
+                                    Try adjusting your search or filters.
+                                </p>
                                 <button
-                                    onClick={() => {
-                                        setSearchQuery(''); setSelectedCats([]); setSelectedConditions([]); setSelectedVendors([]); setPriceRange([0, 5000]);
+                                    onClick={clearFilters}
+                                    style={{
+                                        background: '#C94A2D', color: 'white', border: 'none',
+                                        padding: '12px 28px', borderRadius: 8, cursor: 'pointer',
+                                        fontWeight: 700, fontFamily: 'DM Sans, sans-serif', fontSize: 14,
                                     }}
-                                    className="bg-[var(--color-ink)] text-white hover:bg-[var(--color-rust)] px-6 py-2 rounded-sm font-bold transition-colors"
                                 >
-                                    Clear all filters
+                                    Clear All Filters
                                 </button>
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                                {filtered.map(book => (
-                                    <div key={book.id} className="bg-white group rounded-sm shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col hover:-translate-y-1">
-                                        <Link href={`/book/${book.id}`} className="block relative">
-                                            <BookCoverImage book={book} />
-                                            <div className="absolute top-2 right-2 bg-[var(--color-rust)] text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow-sm">
-                                                50% OFF
-                                            </div>
-                                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-3 pt-8">
-                                                <span className="text-white text-[10px] font-bold uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded-sm backdrop-blur-sm">
-                                                    {book.condition.replace('_', ' ')}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={(e) => { e.preventDefault(); toggleWishlist(book.id); toast.success(hasWishlist(book.id) ? "Removed from wishlist" : "Added to wishlist"); }}
-                                                className={`absolute top-2 left-2 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-sm transition-colors ${hasWishlist(book.id) ? 'text-red-500' : 'text-[var(--color-dust)] hover:text-red-500'}`}
-                                            >
-                                                <Heart size={16} fill={hasWishlist(book.id) ? "currentColor" : "none"} />
-                                            </button>
-                                        </Link>
-                                        <div className="p-4 flex-1 flex flex-col">
-                                            <Link href={`/book/${book.id}`} className="font-display font-bold text-sm text-[var(--color-ink)] line-clamp-2 leading-snug mb-1 hover:text-[var(--color-rust)] transition-colors">
-                                                {book.title}
-                                            </Link>
-                                            <p className="text-[10px] text-[var(--color-dust)] uppercase mb-3 flex-1">{book.author}</p>
+                        )}
 
-                                            <div className="mb-3">
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="font-mono text-lg font-bold text-[var(--color-sage)]">₹{book.ourPrice}</span>
-                                                    <span className="font-mono text-xs line-through text-[var(--color-dust)]">₹{book.mrp}</span>
+                        {!loading && !error && filtered.length > 0 && (
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                                gap: 16,
+                            }}>
+                                {filtered.map(book => {
+                                    const ourPrice = book.our_price ?? book.ourPrice ?? Math.round(Number(book.mrp || 0) * 0.5)
+                                    const savings = book.savings ?? Math.round(Number(book.mrp || 0) * 0.5)
+                                    const inCart = hasItem(book.id)
+                                    const inWishlist = hasWishlist(book.id)
+
+                                    return (
+                                        <div
+                                            key={book.id}
+                                            style={{
+                                                background: 'white', borderRadius: 12, overflow: 'hidden',
+                                                boxShadow: '0 2px 8px rgba(26,18,8,0.08)',
+                                                transition: 'all 0.25s', display: 'flex', flexDirection: 'column',
+                                            }}
+                                            onMouseEnter={e => {
+                                                (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'
+                                                    ; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(26,18,8,0.15)'
+                                            }}
+                                            onMouseLeave={e => {
+                                                (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
+                                                    ; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(26,18,8,0.08)'
+                                            }}
+                                        >
+                                            {/* Cover */}
+                                            <div style={{ position: 'relative', width: '100%', aspectRatio: '0.72', background: '#D4C5A9', overflow: 'hidden' }}>
+                                                <Link href={`/book/${book.id}`} style={{ display: 'block', width: '100%', height: '100%' }}>
+                                                    <BookCover book={book} />
+                                                </Link>
+
+                                                {/* 50% OFF badge */}
+                                                <div style={{
+                                                    position: 'absolute', top: 8, right: 8,
+                                                    background: '#C94A2D', color: 'white',
+                                                    fontSize: 9, fontWeight: 700, padding: '3px 7px',
+                                                    borderRadius: 4, fontFamily: 'DM Sans, sans-serif',
+                                                }}>
+                                                    50% OFF
                                                 </div>
-                                                <div className="text-[11px] font-bold text-[var(--color-rust)] bg-[var(--color-rust)]/10 inline-block px-1.5 py-0.5 rounded-sm mt-1">
-                                                    Save ₹{book.savings}
-                                                </div>
-                                            </div>
 
-                                            <div className="flex items-center gap-1 text-[9px] text-[var(--color-dust)] mb-4">
-                                                <MapPin size={10} />
-                                                <span className="truncate">{book.vendorName}, {book.area}</span>
-                                            </div>
+                                                {/* Condition badge */}
+                                                {book.condition && (
+                                                    <div style={{
+                                                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                                                        background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)',
+                                                        padding: '20px 8px 8px',
+                                                    }}>
+                                                        <span style={{
+                                                            color: 'white', fontSize: 9, fontWeight: 700,
+                                                            textTransform: 'uppercase', letterSpacing: 0.5,
+                                                            fontFamily: 'DM Sans, sans-serif',
+                                                        }}>
+                                                            {book.condition.replace('_', ' ')}
+                                                        </span>
+                                                    </div>
+                                                )}
 
-                                            <div className="flex gap-2 mt-auto">
+                                                {/* Wishlist */}
                                                 <button
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        if (!hasItem(book.id)) {
-                                                            addCart(book);
-                                                            toast.success(`Added to cart: ${book.title}`);
-                                                        }
+                                                    onClick={e => {
+                                                        e.preventDefault()
+                                                        toggleWishlist(book.id)
+                                                        toast.success(inWishlist ? 'Removed from wishlist' : 'Added to wishlist')
                                                     }}
-                                                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-bold rounded-sm transition-colors ${hasItem(book.id) ? 'bg-[var(--color-sage)] text-white' : 'bg-[var(--color-ink)] hover:bg-[var(--color-rust)] text-white'}`}
+                                                    style={{
+                                                        position: 'absolute', top: 8, left: 8,
+                                                        background: 'rgba(255,255,255,0.9)', border: 'none',
+                                                        borderRadius: '50%', width: 30, height: 30,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        cursor: 'pointer', color: inWishlist ? '#ef4444' : '#8B7355',
+                                                    }}
                                                 >
-                                                    {hasItem(book.id) ? <><Check size={14} /> In Cart</> : 'Add to Cart'}
+                                                    <Heart size={14} fill={inWishlist ? 'currentColor' : 'none'} />
                                                 </button>
-                                                <a
-                                                    href={waBook(book)}
-                                                    target="_blank" rel="noopener noreferrer"
-                                                    className="w-8 flex items-center justify-center bg-[#25D366]/10 text-[#25D366] rounded-sm hover:bg-[#25D366] hover:text-white transition-colors"
-                                                >
-                                                    <MessageCircle size={16} />
-                                                </a>
+                                            </div>
+
+                                            {/* Info */}
+                                            <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <Link href={`/book/${book.id}`} style={{ textDecoration: 'none' }}>
+                                                    <p style={{
+                                                        fontFamily: 'Playfair Display, serif', fontSize: 12,
+                                                        fontWeight: 700, color: '#1A1208', lineHeight: 1.3,
+                                                        marginBottom: 2, overflow: 'hidden',
+                                                        display: '-webkit-box', WebkitLineClamp: 2,
+                                                        WebkitBoxOrient: 'vertical',
+                                                    }}>
+                                                        {book.title}
+                                                    </p>
+                                                    <p style={{ fontSize: 10, color: '#8B7355', fontFamily: 'DM Sans, sans-serif', marginBottom: 8 }}>
+                                                        {book.author}
+                                                    </p>
+                                                </Link>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                                                    <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 14, fontWeight: 700, color: '#4A7C59' }}>
+                                                        ₹{ourPrice}
+                                                    </span>
+                                                    <span style={{ fontSize: 10, color: '#8B7355', textDecoration: 'line-through' }}>
+                                                        ₹{book.mrp}
+                                                    </span>
+                                                </div>
+                                                <p style={{ fontSize: 10, color: '#C94A2D', fontFamily: 'DM Sans, sans-serif', fontWeight: 700, marginBottom: 10 }}>
+                                                    Save ₹{savings} • 50% OFF
+                                                </p>
+
+                                                {/* Actions */}
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!inCart) {
+                                                                addCart({ ...book, ourPrice, savings })
+                                                                toast.success(`Added: ${book.title}`)
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            flex: 1, padding: '8px 4px', border: 'none',
+                                                            borderRadius: 6, cursor: inCart ? 'default' : 'pointer',
+                                                            fontFamily: 'DM Sans, sans-serif', fontWeight: 700,
+                                                            fontSize: 11, display: 'flex', alignItems: 'center',
+                                                            justifyContent: 'center', gap: 4,
+                                                            background: inCart ? '#4A7C59' : '#1A1208',
+                                                            color: 'white', transition: 'background 0.2s',
+                                                        }}
+                                                    >
+                                                        {inCart ? <><Check size={12} /> In Cart</> : 'Add to Cart'}
+                                                    </button>
+                                                    <a
+                                                        href={waLink(book)}
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        style={{
+                                                            width: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            background: 'rgba(37,211,102,0.1)', color: '#25D366',
+                                                            borderRadius: 6, textDecoration: 'none', flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        <MessageCircle size={16} />
+                                                    </a>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Mobile Filters Bottom Sheet */}
+            {/* Mobile Filter Sheet */}
             {mobileFiltersOpen && (
-                <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
-                    <div className="absolute inset-0 bg-black/60" onClick={() => setMobileFiltersOpen(false)} />
-                    <div className="relative bg-[var(--color-cream)] w-full max-h-[85vh] overflow-y-auto rounded-t-xl p-6 shadow-2xl animate-in slide-in-from-bottom pb-20">
-                        <div className="flex justify-between items-center mb-6 border-b border-[var(--color-ldust)] pb-4">
-                            <h3 className="font-display font-black text-xl text-[var(--color-ink)] flex items-center gap-2">
-                                <SlidersHorizontal size={20} />
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 50,
+                    display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+                }}>
+                    <div
+                        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }}
+                        onClick={() => setMobileFiltersOpen(false)}
+                    />
+                    <div style={{
+                        position: 'relative', background: '#FAF6EC',
+                        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                        padding: 24, maxHeight: '88vh', overflowY: 'auto',
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <h3 style={{ fontFamily: 'Playfair Display, serif', fontWeight: 700, fontSize: 18, color: '#1A1208' }}>
                                 Filters
                             </h3>
-                            <button onClick={() => setMobileFiltersOpen(false)} className="text-[var(--color-dust)] p-2">
+                            <button
+                                onClick={() => setMobileFiltersOpen(false)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8B7355' }}
+                            >
                                 <X size={24} />
                             </button>
                         </div>
-                        {renderSidebar()}
-                        <div className="mt-8 sticky bottom-0 bg-[var(--color-cream)] pt-4 pb-4">
-                            <button
-                                onClick={() => setMobileFiltersOpen(false)}
-                                className="w-full bg-[var(--color-ink)] text-white py-4 rounded-sm font-bold shadow-lg"
-                            >
-                                Show {filtered.length} Results
-                            </button>
-                        </div>
+                        <FiltersPanel />
+                        <button
+                            onClick={() => setMobileFiltersOpen(false)}
+                            style={{
+                                marginTop: 24, width: '100%', padding: '14px',
+                                background: '#1A1208', color: 'white', border: 'none',
+                                borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                                fontFamily: 'DM Sans, sans-serif',
+                            }}
+                        >
+                            Show {filtered.length} Results
+                        </button>
                     </div>
                 </div>
             )}
+
+            <style>{`
+        @media (min-width: 768px) { .hidden-on-mobile { display: block !important; } }
+        @media (max-width: 767px) { .hidden-on-mobile { display: none !important; } }
+      `}</style>
         </div>
-    );
+    )
 }
 
 export default function BrowsePage() {
     return (
-        <Suspense fallback={<div className="min-h-screen bg-[var(--color-cream)] p-20 text-center font-bold">Loading...</div>}>
+        <Suspense fallback={
+            <div style={{ minHeight: '100vh', background: '#FAF6EC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ fontFamily: 'DM Sans, sans-serif', color: '#8B7355', fontSize: 16 }}>Loading books...</p>
+            </div>
+        }>
             <BrowseContent />
         </Suspense>
     )

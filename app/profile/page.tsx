@@ -8,18 +8,25 @@ import { User, LogOut, Package, MapPin, Heart } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ProfilePage() {
-    const { user, isLoggedIn, logout } = useAuth();
+    const { user, userDoc, isLoggedIn, isLoading } = useAuth();
     const router = useRouter();
+
+    if (isLoading) return null;
 
     if (!isLoggedIn || !user) {
         if (typeof window !== 'undefined') router.push('/auth');
         return null;
     }
 
-    const handleLogout = () => {
-        logout();
-        toast.info("Logged out successfully");
-        router.push('/');
+    const handleLogout = async () => {
+        try {
+            const { signOutUser } = await import('@/lib/firebase/auth');
+            await signOutUser();
+            toast.info("Logged out successfully");
+            router.push('/');
+        } catch (err) {
+            toast.error("Logout failed");
+        }
     };
 
     return (
@@ -38,10 +45,10 @@ export default function ProfilePage() {
                             <div className="w-24 h-24 bg-[var(--color-paper)] rounded-full flex items-center justify-center mx-auto mb-4 text-[var(--color-ink)] border border-[var(--color-ldust)]">
                                 <User size={40} />
                             </div>
-                            <h2 className="font-bold text-lg text-[var(--color-ink)]">{user.full_name}</h2>
+                            <h2 className="font-bold text-lg text-[var(--color-ink)]">{userDoc?.full_name || 'User'}</h2>
                             <p className="text-sm text-[var(--color-dust)] mb-4">{user.email}</p>
                             <div className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[var(--color-sage)] bg-[var(--color-sage)]/10 px-3 py-1 rounded-sm">
-                                {user.role} Account
+                                {userDoc?.role || 'Buyer'} Account
                             </div>
                         </div>
                     </div>
@@ -52,11 +59,11 @@ export default function ProfilePage() {
                             <div className="grid grid-cols-2 gap-y-4 text-sm">
                                 <div>
                                     <span className="block text-[var(--color-dust)] text-xs uppercase font-bold mb-1">Phone Number</span>
-                                    <span className="font-mono">{user.phone}</span>
+                                    <span className="font-mono">{userDoc?.phone || 'Not provided'}</span>
                                 </div>
                                 <div>
                                     <span className="block text-[var(--color-dust)] text-xs uppercase font-bold mb-1">Default Area</span>
-                                    <span className="flex items-center gap-1"><MapPin size={14} className="text-[var(--color-rust)]" /> {user.area}</span>
+                                    <span className="flex items-center gap-1"><MapPin size={14} className="text-[var(--color-rust)]" /> {userDoc?.area || 'Not provided'}</span>
                                 </div>
                             </div>
                         </div>

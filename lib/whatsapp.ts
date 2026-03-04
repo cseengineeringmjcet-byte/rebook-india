@@ -1,7 +1,7 @@
 import { Book } from './data/books';
 import { Vendor } from './data/vendors';
 
-const WA_NUMBER = process.env.NEXT_PUBLIC_WA_NUMBER || '919876543210';
+const WA_NUMBER = process.env.NEXT_PUBLIC_WA_NUMBER || '6301038443';
 
 export function waBook(book: Book) {
     const text = `Hi Rebook India! I want to buy:\n\n*${book.title}* by ${book.author}\n🛒 Price: ₹${book.ourPrice} (MRP ₹${book.mrp})\n📍 Vendor: ${book.vendorName}, ${book.area}\n\nCan you confirm availability?`;

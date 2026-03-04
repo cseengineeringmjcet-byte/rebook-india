@@ -1,999 +1,1382 @@
-"use client";
+'use client'
 
-import React, { useState, useEffect } from "react";
-import { adminSupabase } from "@/lib/supabase/admin-client";
-import RebookIndiaLogo from "@/components/Logo";
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-    Grid, ClipboardList, Tag, BookOpen, Store, Users, Settings, Clock, LogOut,
-    RefreshCw, Search, Eye, MessageCircle, X, Check, XCircle, EyeOff, AlertCircle, Download,
-    Image as ImageIcon, MoreVertical, CheckCircle, Bell, Book
-} from "lucide-react";
-import { toast } from "sonner";
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  type Timestamp,
+} from 'firebase/firestore'
+import { db } from '@/lib/firebase/config'
+import RebookIndiaLogo from '@/components/Logo'
+import {
+  BookOpen,
+  ClipboardList,
+  Grid,
+  LogOut,
+  Settings,
+  Store,
+  Tag,
+  Users,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
 
-const ADMIN_USER = 'rebookindia';
-const ADMIN_PASS = 'RebookAdmin@2025';
+const ADMIN_USER = 'rebookindia'
+const ADMIN_PASS = 'RebookAdmin@2025'
 
-const statusColors: Record<string, string> = {
-    placed: "bg-yellow-500",
-    reviewing: "bg-blue-500",
-    confirmed: "bg-purple-500",
-    dispatched: "bg-orange-500",
-    delivered: "bg-green-500",
-    cancelled: "bg-red-500",
-};
+const INK = '#1A1208'
+const RUST = '#C94A2D'
 
-const listingStatusColors: Record<string, string> = {
-    pending: "bg-amber-500 text-white",
-    approved: "bg-sage-600 text-white",
-    listed: "bg-blue-500 text-white",
-    rejected: "bg-red-500 text-white",
-    expired: "bg-gray-400 text-white",
-    sold: "bg-[var(--color-ink)] text-white"
-};
+type SectionId = 'dashboard' | 'orders' | 'listings' | 'books' | 'vendors' | 'users' | 'settings'
+
+type AnyDoc = Record<string, any> & { id: string }
+
+function tsToDate(v: any): Date | null {
+  if (!v) return null
+  if (typeof v === 'string') {
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  if (v?.toDate) return (v as Timestamp).toDate()
+  if (typeof v?.seconds === 'number') return new Date(v.seconds * 1000)
+  return null
+}
+
+function money(n: any) {
+  const x = typeof n === 'number' ? n : Number(n ?? 0)
+  return `₹${Number.isFinite(x) ? x : 0}`
+}
+
+function calcPrices(mrp: number) {
+  const m = typeof mrp === 'number' ? mrp : Number(mrp)
+  return {
+    our_price: Math.round(m * 0.5),
+    vendor_earn: Math.round(m * 0.4),
+    ri_earn: Math.round(m * 0.1),
+    savings: Math.round(m * 0.5),
+  }
+}
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(false);
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-    const handleLogin = (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        setLoading(true);
-        setError(false);
+  const submit = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    setLoading(true)
+    setError('')
+    setTimeout(() => {
+      if (username === ADMIN_USER && password === ADMIN_PASS) {
+        sessionStorage.setItem('ri_admin_logged_in', 'true')
+        onLogin()
+        toast.success('Welcome back, Admin!')
+      } else {
+        setError('Invalid credentials')
+      }
+      setLoading(false)
+    }, 500)
+  }
 
-        setTimeout(() => {
-            if (username === ADMIN_USER && password === ADMIN_PASS) {
-                sessionStorage.setItem('ri_admin_logged_in', 'true');
-                toast.success("Welcome back, Admin!");
-                onLogin();
-            } else {
-                setError(true);
-                setLoading(false);
-            }
-        }, 800);
-    };
-
-    return (
-        <div className="min-h-screen bg-[var(--color-ink)] flex items-center justify-center p-4">
-            <div className={`bg-white w-full max-w-[400px] rounded-2xl shadow-2xl p-8 overflow-hidden transition-transform ${error ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
-                <div className="flex justify-center mb-6">
-                    <RebookIndiaLogo variant="nav" darkBg={false} />
-                </div>
-                <div className="text-center mb-6">
-                    <h1 className="font-display font-bold text-2xl text-[var(--color-ink)] mb-1">Admin Panel</h1>
-                    <p className="font-sans text-[13px] text-[var(--color-dust)]">Rebook India Control Center</p>
-                </div>
-
-                <div className="h-[1px] w-12 mx-auto bg-[var(--color-amber)] mb-8"></div>
-
-                <form onSubmit={handleLogin} className="space-y-5">
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Username</label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
-                            placeholder="Enter admin username"
-                            className="w-full border border-[var(--color-ldust)] rounded-xl px-4 py-3 text-sm focus:border-[var(--color-rust)] focus:outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Password</label>
-                        <div className="relative">
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                placeholder="Enter admin password"
-                                className="w-full border border-[var(--color-ldust)] rounded-xl px-4 py-3 text-sm focus:border-[var(--color-rust)] focus:outline-none pr-12"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-dust)] hover:text-[var(--color-ink)]"
-                            >
-                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
-                        </div>
-                    </div>
-
-                    {error && (
-                        <div className="text-red-500 font-bold text-sm text-center">
-                            Wrong username or password
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-[var(--color-rust)] hover:bg-[#A93C23] text-[var(--color-cream)] rounded-xl py-[14px] font-sans font-semibold text-[15px] transition-colors flex justify-center items-center"
-                    >
-                        {loading ? (
-                            <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span> Logging in...</>
-                        ) : "Login to Admin Panel"}
-                    </button>
-                </form>
-
-                <div className="mt-8 text-center text-xs text-[var(--color-dust)]">
-                    Rebook India © 2025 | Admin Access Only
-                </div>
-            </div>
-            <style dangerouslySetInnerHTML={{
-                __html: `
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-          20%, 40%, 60%, 80% { transform: translateX(5px); }
-        }
-      `}} />
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: INK }}>
+      <div className={`bg-white w-full max-w-[420px] rounded-2xl shadow-2xl p-8 ${error ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+        <div className="flex justify-center mb-6">
+          <RebookIndiaLogo variant="nav" darkBg={false} />
         </div>
-    );
+        <div className="text-center mb-6">
+          <h1 className="font-display font-bold text-2xl text-[var(--color-ink)] mb-1">Admin Panel</h1>
+          <p className="font-sans text-[13px] text-[var(--color-dust)]">Rebook India Control Center</p>
+        </div>
+
+        <div className="h-[1px] w-12 mx-auto bg-[var(--color-amber)] mb-8" />
+
+        <form onSubmit={submit} className="space-y-5">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Username</label>
+            <input
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className="w-full border border-[var(--color-ldust)] rounded-xl px-4 py-3 text-sm focus:border-[var(--color-rust)] focus:outline-none"
+              placeholder="Enter admin username"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full border border-[var(--color-ldust)] rounded-xl px-4 py-3 text-sm focus:border-[var(--color-rust)] focus:outline-none pr-16"
+                placeholder="Enter admin password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-dust)] font-bold text-xs hover:text-[var(--color-ink)] transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? 'HIDE' : 'SHOW'}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-red-600 font-bold text-sm text-center">{error}</div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[var(--color-rust)] hover:bg-[#A93C23] disabled:opacity-60 text-[var(--color-cream)] rounded-xl py-[14px] font-sans font-semibold text-[15px] transition-colors flex justify-center items-center"
+          >
+            {loading ? 'Logging in…' : 'Login'}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-xs text-[var(--color-dust)]">
+          Rebook India © 2025 | Admin Access Only
+        </div>
+      </div>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+            20%, 40%, 60%, 80% { transform: translateX(6px); }
+          }
+        `
+      }} />
+    </div>
+  )
+}
+
+function Modal({
+  open,
+  title,
+  children,
+  onClose,
+}: {
+  open: boolean
+  title: string
+  children: React.ReactNode
+  onClose: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white w-full max-w-3xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--color-ldust)] flex items-center justify-between bg-[var(--color-paper)]">
+          <div className="font-display font-black text-[20px] text-[var(--color-ink)]">{title}</div>
+          <button onClick={onClose} className="p-2 rounded-full border border-[var(--color-ldust)] bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 overflow-auto">{children}</div>
+      </div>
+    </div>
+  )
 }
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
-    const [activeSection, setActiveSection] = useState("dashboard");
-    const [currentTime, setCurrentTime] = useState("");
+  const [active, setActive] = useState<SectionId>('dashboard')
+  const [time, setTime] = useState(new Date())
 
-    const [stats, setStats] = useState({
-        totalOrders: 0, pendingOrders: 0, totalBooks: 0,
-        totalVendors: 0, pendingListings: 0, totalUsers: 0
-    });
-    const [statsLoading, setStatsLoading] = useState(true);
-    const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<AnyDoc[]>([])
+  const [books, setBooks] = useState<AnyDoc[]>([])
+  const [vendors, setVendors] = useState<AnyDoc[]>([])
+  const [users, setUsers] = useState<AnyDoc[]>([])
+  const [categories, setCategories] = useState<AnyDoc[]>([])
+  const [listings, setListings] = useState<AnyDoc[]>([])
 
-    // Orders Section State
-    const [allOrders, setAllOrders] = useState<any[]>([]);
-    const [ordersLoading, setOrdersLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState("All");
+  // Approve/Reject listing modals
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [selectedListing, setSelectedListing] = useState<AnyDoc | null>(null)
+  const [approveVendorId, setApproveVendorId] = useState('')
+  const [approveCategoryId, setApproveCategoryId] = useState('')
+  const [approveMrp, setApproveMrp] = useState<number>(0)
+  const [rejectReason, setRejectReason] = useState('')
 
-    // Modal State
-    const [selectedOrder, setSelectedOrder] = useState<any>(null);
-    const [adminNotes, setAdminNotes] = useState("");
-    const [trackingNo, setTrackingNo] = useState("");
+  // search and tabs
+  const [orderSearch, setOrderSearch] = useState('')
+  const [listingTab, setListingTab] = useState('Pending')
 
-    // Listings State
-    const [listings, setListings] = useState<any[]>([]);
-    const [listingsLoading, setListingsLoading] = useState(true);
-    const [vendorOptions, setVendorOptions] = useState<any[]>([]);
-    const [categoryOptions, setCategoryOptions] = useState<any[]>([]);
-    const [listingsStatusFilter, setListingsStatusFilter] = useState("All");
-    const [listingsSearchQuery, setListingsSearchQuery] = useState("");
+  // Book add/edit modal
+  const [bookModalOpen, setBookModalOpen] = useState(false)
+  const [bookEditing, setBookEditing] = useState<AnyDoc | null>(null)
+  const [bookForm, setBookForm] = useState<any>({
+    title: '',
+    author: '',
+    isbn: '',
+    publisher: '',
+    edition: '',
+    category_id: '',
+    vendor_id: '',
+    mrp: 0,
+    condition: 'good',
+    stock: 1,
+    description: '',
+    cover_url: '',
+    is_featured: false,
+    is_available: true,
+  })
 
-    // Additional States
-    const [booksList, setBooksList] = useState<any[]>([]);
-    const [booksLoading, setBooksLoading] = useState(true);
-    const [vendorsList, setVendorsList] = useState<any[]>([]);
-    const [vendorsLoading, setVendorsLoading] = useState(true);
-    const [usersList, setUsersList] = useState<any[]>([]);
-    const [usersLoading, setUsersLoading] = useState(true);
+  // Vendor add/edit modal
+  const [vendorModalOpen, setVendorModalOpen] = useState(false)
+  const [vendorEditing, setVendorEditing] = useState<AnyDoc | null>(null)
+  const [vendorForm, setVendorForm] = useState<any>({
+    shop_name: '',
+    owner_name: '',
+    area: '',
+    phone: '',
+    badge: 'Verified',
+    rating: 4.5,
+    shop_image: '',
+  })
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentTime(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
-        }, 1000);
-        return () => clearInterval(timer);
-    }, []);
+  // Notification modal (users)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyUser, setNotifyUser] = useState<AnyDoc | null>(null)
+  const [notifyMessage, setNotifyMessage] = useState('')
 
-    const fetchData = async () => {
-        setStatsLoading(true);
-        setOrdersLoading(true);
-        try {
-            const p1 = adminSupabase.from("orders").select("*", { count: "exact", head: true });
-            const p2 = adminSupabase.from("orders").select("*", { count: "exact", head: true }).eq("status", "placed");
-            const p3 = adminSupabase.from("books").select("*", { count: "exact", head: true }).eq("is_available", true);
-            const p4 = adminSupabase.from("vendors").select("*", { count: "exact", head: true });
-            const p5 = adminSupabase.from("book_listings").select("*", { count: "exact", head: true }).eq("status", "pending");
-            const p6 = adminSupabase.from("users").select("*", { count: "exact", head: true });
+  const usersById = useMemo(() => {
+    const m: Record<string, AnyDoc> = {}
+    for (const u of users) m[u.id] = u
+    return m
+  }, [users])
 
-            const { data: recent } = await adminSupabase.from("orders").select("*, users(full_name)").order("placed_at", { ascending: false }).limit(10);
-            const { data: allOrd } = await adminSupabase.from("orders").select("*, users(full_name, phone)").order("placed_at", { ascending: false });
+  useEffect(() => {
+    const unsubs: Array<() => void> = []
 
-            const [r1, r2, r3, r4, r5, r6] = await Promise.all([p1, p2, p3, p4, p5, p6]);
+    unsubs.push(onSnapshot(query(collection(db, 'users'), orderBy('created_at', 'desc')), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Users listener error: ${e.message}`)))
 
-            setStats({
-                totalOrders: r1.count || 0,
-                pendingOrders: r2.count || 0,
-                totalBooks: r3.count || 0,
-                totalVendors: r4.count || 0,
-                pendingListings: r5.count || 0,
-                totalUsers: r6.count || 0,
-            });
+    unsubs.push(onSnapshot(query(collection(db, 'vendors'), orderBy('shop_name', 'asc')), (snap) => {
+      setVendors(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Vendors listener error: ${e.message}`)))
 
-            if (recent) setRecentOrders(recent);
-            if (allOrd) setAllOrders(allOrd);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setStatsLoading(false);
-            setOrdersLoading(false);
-        }
-    };
+    unsubs.push(onSnapshot(query(collection(db, 'categories'), orderBy('sort_order', 'asc')), (snap) => {
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Categories listener error: ${e.message}`)))
 
-    useEffect(() => {
-        fetchData();
-        loadListings();
-        loadVendorsForModal();
-        loadCategoriesForModal();
-        loadBooks();
-        loadVendors();
-        loadUsers();
-        loadBooks();
-        loadVendors();
-        loadUsers();
+    unsubs.push(onSnapshot(query(collection(db, 'books'), orderBy('created_at', 'desc')), (snap) => {
+      setBooks(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Books listener error: ${e.message}`)))
 
-        const channel = adminSupabase
-            .channel('admin-listings-realtime')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'book_listings'
-            }, (payload) => {
-                if (payload.eventType === 'INSERT') {
-                    toast.success('New sell request received!');
-                    fetchData(); // Update dash counts
-                    loadListings();
-                }
-                if (payload.eventType === 'UPDATE') {
-                    setListings(prev => prev.map(l =>
-                        l.id === payload.new.id ? { ...l, ...payload.new } : l
-                    ));
-                }
-            })
-            .subscribe();
+    // Orders — real time
+    unsubs.push(onSnapshot(query(collection(db, 'orders'), orderBy('placed_at', 'desc')), (snap) => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Orders listener error: ${e.message}`)))
 
-        return () => { adminSupabase.removeChannel(channel); };
-    }, []);
+    // Listings — real time
+    unsubs.push(onSnapshot(query(collection(db, 'book_listings'), orderBy('created_at', 'desc')), (snap) => {
+      setListings(snap.docs.map(d => ({ id: d.id, ...d.data() } as AnyDoc)))
+    }, (e) => toast.error(`Listings listener error: ${e.message}`)))
 
-    const loadListings = async () => {
-        setListingsLoading(true);
-        try {
-            const { data, error } = await adminSupabase
-                .from('book_listings')
-                .select(`
-        *,
-        users!seller_id (
-          id,
-          full_name,
-          phone,
-          email
-        ),
-        categories (
-          id,
-          name,
-          slug
-        )
-      `)
-                .order('created_at', { ascending: false });
+    const timerId = setInterval(() => setTime(new Date()), 1000)
+    return () => {
+      unsubs.forEach(u => u())
+      clearInterval(timerId)
+    }
+  }, [])
 
-            if (error) throw error;
-            setListings(data || []);
-        } catch (err: any) {
-            toast.error('Failed to load listings: ' + err.message);
-        } finally {
-            setListingsLoading(false);
-        }
-    };
+  const stats = useMemo(() => {
+    const totalOrders = orders.length
+    const pendingOrders = orders.filter(o => (o.status || '').toLowerCase() === 'placed').length
+    const totalBooks = books.length
+    const totalVendors = vendors.length
+    const pendingListings = listings.filter(l => (l.status || '').toLowerCase() === 'pending').length
+    const totalUsers = users.length
+    return { totalOrders, pendingOrders, totalBooks, totalVendors, pendingListings, totalUsers }
+  }, [orders, books, vendors, listings, users])
 
-    const loadVendorsForModal = async () => {
-        const { data } = await adminSupabase
-            .from('vendors')
-            .select('id, shop_name, area')
-            .order('shop_name');
-        setVendorOptions(data || []);
-    };
+  const recentOrders = useMemo(() => orders.slice(0, 10), [orders])
 
-    const loadBooks = async () => {
-        setBooksLoading(true);
-        const { data } = await adminSupabase.from('books').select('*, categories(name)').order('created_at', { ascending: false });
-        setBooksList(data || []);
-        setBooksLoading(false);
-    };
+  const menu = useMemo(() => ([
+    { id: 'dashboard' as const, label: 'Dashboard', icon: <Grid size={20} /> },
+    { id: 'orders' as const, label: 'Orders', icon: <ClipboardList size={20} /> },
+    { id: 'listings' as const, label: 'Listings', icon: <Tag size={20} /> },
+    { id: 'books' as const, label: 'Books', icon: <BookOpen size={20} /> },
+    { id: 'vendors' as const, label: 'Vendors', icon: <Store size={20} /> },
+    { id: 'users' as const, label: 'Users', icon: <Users size={20} /> },
+    { id: 'settings' as const, label: 'Settings', icon: <Settings size={20} /> },
+  ]), [])
 
-    const loadVendors = async () => {
-        setVendorsLoading(true);
-        const { data } = await adminSupabase.from('vendors').select('*').order('created_at', { ascending: false });
-        setVendorsList(data || []);
-        setVendorsLoading(false);
-    };
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: newStatus,
+        ...(newStatus === 'confirmed' ? { confirmed_at: serverTimestamp() } : {}),
+        ...(newStatus === 'dispatched' ? { dispatched_at: serverTimestamp() } : {}),
+        ...(newStatus === 'delivered' ? { delivered_at: serverTimestamp() } : {}),
+      })
+      toast.success('Order updated')
+    } catch (e: any) {
+      toast.error(`Failed to update order: ${e.message}`)
+    }
+  }
 
-    const loadUsers = async () => {
-        setUsersLoading(true);
-        const { data } = await adminSupabase.from('users').select('*').order('created_at', { ascending: false });
-        setUsersList(data || []);
-        setUsersLoading(false);
-    };
+  const openApprove = (listing: AnyDoc) => {
+    setSelectedListing(listing)
+    setApproveVendorId(listing.vendor_id || vendors[0]?.id || '')
+    setApproveCategoryId(listing.category_id || listing.category || categories[0]?.id || categories[0]?.slug || '')
+    setApproveMrp(Number(listing.mrp || 0))
+    setApproveOpen(true)
+  }
 
-    const loadCategoriesForModal = async () => {
-        const { data } = await adminSupabase
-            .from('categories')
-            .select('id, name, slug')
-            .order('sort_order');
-        setCategoryOptions(data || []);
-    };
+  const openReject = (listing: AnyDoc) => {
+    setSelectedListing(listing)
+    setRejectReason('')
+    setRejectOpen(true)
+  }
 
-    const handleStatusChange = async (orderId: string, newStatus: string) => {
-        const updateData: any = { status: newStatus };
-        if (newStatus === "confirmed") updateData.confirmed_at = new Date().toISOString();
-        if (newStatus === "dispatched") updateData.dispatched_at = new Date().toISOString();
-        if (newStatus === "delivered") updateData.delivered_at = new Date().toISOString();
+  const listingUserId = (l: AnyDoc | null) =>
+    (l?.user_id || l?.seller_id || l?.uid || l?.buyer_id || '') as string
 
-        const { error } = await adminSupabase.from("orders").update(updateData).eq("id", orderId);
-        if (error) {
-            toast.error("Failed to update status");
-            return;
-        }
+  const approveListing = async () => {
+    if (!selectedListing) return
+    if (!approveVendorId || !approveCategoryId) {
+      toast.error('Select vendor and category')
+      return
+    }
+    try {
+      const mrp = Number(approveMrp || selectedListing.mrp || 0)
+      const bookPayload = {
+        title: selectedListing.title || selectedListing.book_title || '',
+        author: selectedListing.author || '',
+        isbn: selectedListing.isbn || '',
+        publisher: selectedListing.publisher || '',
+        edition: selectedListing.edition || '',
+        category_id: approveCategoryId,
+        vendor_id: approveVendorId,
+        mrp,
+        condition: selectedListing.condition || 'good',
+        stock: Number(selectedListing.stock || 1),
+        description: selectedListing.description || '',
+        cover_url: selectedListing.cover_url || selectedListing.photo_url || selectedListing.photo_1 || '',
+        photo_url: selectedListing.photo_url || selectedListing.photo_1 || selectedListing.cover_url || '',
+        is_featured: false,
+        is_available: true,
+        views: 0,
+        ...calcPrices(mrp),
+        created_at: serverTimestamp(),
+      }
 
-        toast.success(`Order status updated to ${newStatus}`);
-        fetchData();
-        if (selectedOrder && selectedOrder.id === orderId) {
-            setSelectedOrder({ ...selectedOrder, ...updateData });
-        }
-    };
+      await addDoc(collection(db, 'books'), bookPayload)
+      await updateDoc(doc(db, 'book_listings', selectedListing.id), {
+        status: 'approved',
+        vendor_id: approveVendorId,
+        category_id: approveCategoryId,
+        mrp,
+        approved_at: serverTimestamp(),
+      })
+      const uid = listingUserId(selectedListing)
+      if (uid) {
+        await addDoc(collection(db, 'notifications'), {
+          user_id: uid,
+          title: 'Listing approved',
+          message: 'Your book is live!',
+          is_read: false,
+          created_at: serverTimestamp(),
+        })
+      }
+      toast.success('Listing approved and book created')
+      setApproveOpen(false)
+      setSelectedListing(null)
+    } catch (e: any) {
+      toast.error(`Approve failed: ${e.message}`)
+    }
+  }
 
-    const handleListingStatusChange = async (listingId: string, newStatus: string) => {
-        const { error } = await adminSupabase.from("book_listings").update({ status: newStatus }).eq("id", listingId);
-        if (error) {
-            toast.error("Failed to update listing status");
-            return;
-        }
-        toast.success(`Listing status updated to ${newStatus}`);
-        loadListings();
-        fetchData(); // update stats
-    };
+  const rejectListing = async () => {
+    if (!selectedListing) return
+    if (!rejectReason.trim()) {
+      toast.error('Reason is required')
+      return
+    }
+    try {
+      await updateDoc(doc(db, 'book_listings', selectedListing.id), {
+        status: 'rejected',
+        reject_reason: rejectReason.trim(),
+        rejected_at: serverTimestamp(),
+      })
+      const uid = listingUserId(selectedListing)
+      if (uid) {
+        await addDoc(collection(db, 'notifications'), {
+          user_id: uid,
+          title: 'Listing rejected',
+          message: rejectReason.trim(),
+          is_read: false,
+          created_at: serverTimestamp(),
+        })
+      }
+      toast.success('Listing rejected')
+      setRejectOpen(false)
+      setSelectedListing(null)
+    } catch (e: any) {
+      toast.error(`Reject failed: ${e.message}`)
+    }
+  }
 
-    const saveAdminNotes = async () => {
-        if (!selectedOrder) return;
-        const { error } = await adminSupabase.from("orders").update({ admin_notes: adminNotes }).eq("id", selectedOrder.id);
-        if (error) toast.error("Failed to save notes");
-        else {
-            toast.success("Notes saved");
-            fetchData();
-        }
-    };
+  const openAddBook = () => {
+    setBookEditing(null)
+    setBookForm({
+      title: '',
+      author: '',
+      isbn: '',
+      publisher: '',
+      edition: '',
+      category_id: categories[0]?.slug || categories[0]?.id || '',
+      vendor_id: vendors[0]?.id || '',
+      mrp: 0,
+      condition: 'good',
+      stock: 1,
+      description: '',
+      cover_url: '',
+      is_featured: false,
+      is_available: true,
+    })
+    setBookModalOpen(true)
+  }
 
-    const saveTracking = async () => {
-        if (!selectedOrder) return;
-        const { error } = await adminSupabase.from("orders").update({ tracking_no: trackingNo }).eq("id", selectedOrder.id);
-        if (error) toast.error("Failed to save tracking");
-        else {
-            toast.success("Tracking saved");
-            fetchData();
-        }
-    };
+  const openEditBook = (b: AnyDoc) => {
+    setBookEditing(b)
+    setBookForm({
+      title: b.title || '',
+      author: b.author || '',
+      isbn: b.isbn || '',
+      publisher: b.publisher || '',
+      edition: b.edition || '',
+      category_id: b.category_id || '',
+      vendor_id: b.vendor_id || '',
+      mrp: Number(b.mrp || 0),
+      condition: b.condition || 'good',
+      stock: Number(b.stock || 1),
+      description: b.description || '',
+      cover_url: b.cover_url || '',
+      is_featured: !!b.is_featured,
+      is_available: b.is_available ?? true,
+    })
+    setBookModalOpen(true)
+  }
 
-    const exportCSV = () => {
-        if (!allOrders.length) return;
-        const headers = ["Order No", "Buyer", "Title", "MRP", "Paid", "Status", "Placed At"];
-        const rows = filteredOrders.map(o => [
-            o.order_number,
-            o.users?.full_name || o.buyer_id,
-            `"${o.book_title}"`,
-            o.mrp,
-            o.price_paid,
-            o.status,
-            new Date(o.placed_at).toLocaleString()
-        ]);
-        const csvContent = "data:text/csv;charset=utf-8,"
-            + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "rebook_orders_export.csv");
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    };
+  const saveBook = async () => {
+    const mrp = Number(bookForm.mrp || 0)
+    if (!bookForm.title || !mrp) {
+      toast.error('Title and MRP are required')
+      return
+    }
+    const payload = {
+      ...bookForm,
+      mrp,
+      stock: Number(bookForm.stock || 1),
+      ...calcPrices(mrp),
+    }
+    try {
+      if (bookEditing) {
+        await updateDoc(doc(db, 'books', bookEditing.id), payload)
+        toast.success('Book updated')
+      } else {
+        await addDoc(collection(db, 'books'), {
+          ...payload,
+          views: 0,
+          created_at: serverTimestamp(),
+        })
+        toast.success('Book added')
+      }
+      setBookModalOpen(false)
+      setBookEditing(null)
+    } catch (e: any) {
+      toast.error(`Save failed: ${e.message}`)
+    }
+  }
 
-    const filteredOrders = allOrders.filter(o => {
-        if (statusFilter !== "All" && o.status !== statusFilter.toLowerCase()) return false;
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            if (!o.order_number?.toLowerCase().includes(q) &&
-                !o.users?.full_name?.toLowerCase().includes(q) &&
-                !o.book_title?.toLowerCase().includes(q)) return false;
-        }
-        return true;
-    });
+  const deleteBook = async (b: AnyDoc) => {
+    if (!confirm(`Delete "${b.title}"?`)) return
+    try {
+      await deleteDoc(doc(db, 'books', b.id))
+      toast.success('Book deleted')
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e.message}`)
+    }
+  }
 
-    const filteredListings = listings.filter(l => {
-        if (listingsStatusFilter !== "All" && l.status !== listingsStatusFilter.toLowerCase()) return false;
-        if (listingsSearchQuery) {
-            const q = listingsSearchQuery.toLowerCase();
-            if (!l.title?.toLowerCase().includes(q) &&
-                !l.users?.full_name?.toLowerCase().includes(q) &&
-                !l.author?.toLowerCase().includes(q)) return false;
-        }
-        return true;
-    });
+  const toggleBookField = async (bookId: string, field: 'is_featured' | 'is_available', next: boolean) => {
+    try {
+      await updateDoc(doc(db, 'books', bookId), { [field]: next })
+    } catch (e: any) {
+      toast.error(`Update failed: ${e.message}`)
+    }
+  }
 
-    const menuItems = [
-        { id: "dashboard", label: "Dashboard", icon: <Grid size={20} /> },
-        { id: "orders", label: "Orders", icon: <ClipboardList size={20} /> },
-        { id: "listings", label: "Listings", icon: <Tag size={20} /> },
-        { id: "books", label: "Books", icon: <BookOpen size={20} /> },
-        { id: "vendors", label: "Vendors", icon: <Store size={20} /> },
-        { id: "users", label: "Users", icon: <Users size={20} /> },
-        { id: "settings", label: "Settings", icon: <Settings size={20} /> },
-    ];
+  const openAddVendor = () => {
+    setVendorEditing(null)
+    setVendorForm({
+      shop_name: '',
+      owner_name: '',
+      area: '',
+      phone: '',
+      badge: 'Verified',
+      rating: 4.5,
+      shop_image: '',
+    })
+    setVendorModalOpen(true)
+  }
 
-    return (
-        <div className="flex flex-row h-screen overflow-hidden bg-[var(--color-cream)]">
+  const openEditVendor = (v: AnyDoc) => {
+    setVendorEditing(v)
+    setVendorForm({
+      shop_name: v.shop_name || '',
+      owner_name: v.owner_name || '',
+      area: v.area || '',
+      phone: v.phone || '',
+      badge: v.badge || 'Verified',
+      rating: Number(v.rating || 4.5),
+      shop_image: v.shop_image || '',
+    })
+    setVendorModalOpen(true)
+  }
 
-            {/* LEFT SIDEBAR */}
-            <aside className="w-[260px] h-full bg-[var(--color-ink)] flex flex-col shrink-0 flex-none z-20 shadow-xl">
-                <div className="p-6">
-                    <RebookIndiaLogo variant="nav" darkBg={true} />
-                    <div className="text-[var(--color-amber)] text-[11px] font-bold uppercase tracking-widest mt-2">Admin Panel</div>
-                    <div className="h-[1px] w-full bg-[var(--color-amber)]/20 mt-4" />
+  const saveVendor = async () => {
+    if (!vendorForm.shop_name) {
+      toast.error('Shop name is required')
+      return
+    }
+    try {
+      if (vendorEditing) {
+        await updateDoc(doc(db, 'vendors', vendorEditing.id), vendorForm)
+        toast.success('Vendor updated')
+      } else {
+        await addDoc(collection(db, 'vendors'), { ...vendorForm, created_at: serverTimestamp() })
+        toast.success('Vendor added')
+      }
+      setVendorModalOpen(false)
+      setVendorEditing(null)
+    } catch (e: any) {
+      toast.error(`Save failed: ${e.message}`)
+    }
+  }
+
+  const updateVendorBadge = async (vendorId: string, badge: string) => {
+    try {
+      await updateDoc(doc(db, 'vendors', vendorId), { badge })
+      toast.success('Badge updated')
+    } catch (e: any) {
+      toast.error(`Badge update failed: ${e.message}`)
+    }
+  }
+
+  const updateUserRole = async (userId: string, role: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), { role })
+      toast.success('Role updated')
+    } catch (e: any) {
+      toast.error(`Role update failed: ${e.message}`)
+    }
+  }
+
+  const sendNotification = async () => {
+    if (!notifyUser) return
+    if (!notifyMessage.trim()) {
+      toast.error('Message required')
+      return
+    }
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        user_id: notifyUser.id,
+        title: 'Message from Rebook India',
+        message: notifyMessage.trim(),
+        is_read: false,
+        created_at: serverTimestamp(),
+      })
+      toast.success('Notification sent')
+      setNotifyOpen(false)
+      setNotifyUser(null)
+      setNotifyMessage('')
+    } catch (e: any) {
+      toast.error(`Send failed: ${e.message}`)
+    }
+  }
+
+  const exportCsv = (rows: Record<string, any>[], filename: string) => {
+    if (!rows.length) return toast.error('Nothing to export')
+    const headers = Object.keys(rows[0])
+    const escape = (v: any) => {
+      const s = String(v ?? '')
+      return `"${s.replaceAll('"', '""')}"`
+    }
+    const csv = [
+      headers.join(','),
+      ...rows.map(r => headers.map(h => escape(r[h])).join(',')),
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const clearCollection = async (name: string) => {
+    if (!confirm(`Clear ALL documents in "${name}"?`)) return
+    try {
+      const snap = await getDocs(collection(db, name))
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+      toast.success(`${name} cleared`)
+    } catch (e: any) {
+      toast.error(`Clear failed: ${e.message}`)
+    }
+  }
+
+  const pricesPreview = useMemo(() => calcPrices(Number(bookForm.mrp || 0)), [bookForm.mrp])
+  const approvePreview = useMemo(() => calcPrices(Number(approveMrp || 0)), [approveMrp])
+
+  const pendingListings = useMemo(() => listings.filter(l => (l.status || '').toLowerCase() === 'pending'), [listings])
+
+  return (
+    <div className="flex flex-row h-screen overflow-hidden bg-[var(--color-cream)]">
+      {/* LEFT SIDEBAR */}
+      <aside className="w-[260px] h-full flex flex-col shrink-0 flex-none z-20 shadow-xl" style={{ background: INK }}>
+        <div className="p-6">
+          <RebookIndiaLogo variant="nav" darkBg />
+          <div className="text-[var(--color-amber)] text-[11px] font-bold uppercase tracking-widest mt-2">Admin Panel</div>
+          <div className="h-[1px] w-full bg-[var(--color-amber)]/20 mt-4" />
+        </div>
+
+        <nav className="flex flex-col gap-1 mt-2 flex-1 overflow-y-auto w-full px-2">
+          {menu.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActive(item.id)}
+              className={`flex items-center gap-3 px-4 py-3 mx-2 font-bold transition-all duration-200 ${active === item.id
+                ? 'text-white rounded-r-xl border-l-[4px] border-[#E8A020]'
+                : 'text-[var(--color-ldust)] hover:bg-white/5 hover:text-white rounded-xl'
+                }`}
+              style={active === item.id ? { background: RUST } : undefined}
+            >
+              {item.icon} {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="mt-auto px-6 py-4">
+          <div className="h-[1px] w-full bg-white/10 mb-4" />
+          <div className="mb-4">
+            <div className="text-white font-bold">{ADMIN_USER}</div>
+            <div className="text-[var(--color-dust)] text-xs">Administrator</div>
+          </div>
+          <button
+            onClick={onLogout}
+            className="w-full py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 border"
+            style={{ borderColor: 'rgba(201,74,45,0.35)', color: RUST }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = RUST; (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = RUST }}
+          >
+            <LogOut size={16} /> Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* RIGHT CONTENT */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--color-cream)]">
+        <header className="sticky top-0 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] px-6 py-4 z-10 flex justify-between items-center shrink-0">
+          <h1 className="font-display font-black text-[22px] text-[var(--color-ink)] capitalize">{active}</h1>
+          <div className="flex items-center gap-6 text-sm font-bold text-[var(--color-dust)]">
+            <div>
+              {time.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })} • {time.toLocaleTimeString('en-IN')}
+            </div>
+            <div>
+              Pending listings: <span className="font-mono text-[var(--color-rust)]">{stats.pendingListings}</span>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* DASHBOARD */}
+          {active === 'dashboard' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="rounded-2xl p-5 text-white" style={{ background: INK }}>
+                  <div className="text-xs font-bold uppercase tracking-wider opacity-70">Total Orders</div>
+                  <div className="text-4xl font-black font-mono text-[var(--color-amber)] mt-1">{stats.totalOrders}</div>
                 </div>
-
-                <nav className="flex flex-col gap-1 mt-2 flex-1 overflow-y-auto w-full px-2">
-                    {menuItems.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveSection(item.id)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl mx-2 font-bold transition-all duration-200 ${activeSection === item.id
-                                ? 'bg-[var(--color-rust)] text-[var(--color-cream)]'
-                                : 'text-[var(--color-ldust)] hover:bg-white/5 hover:text-[var(--color-cream)]'
-                                }`}
-                        >
-                            {item.icon} {item.label}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="mt-auto px-6 py-4">
-                    <div className="h-[1px] w-full bg-[var(--color-ldust)]/20 mb-4" />
-                    <div className="mb-4">
-                        <div className="text-[var(--color-cream)] font-bold">{ADMIN_USER}</div>
-                        <div className="text-[var(--color-dust)] text-xs">Administrator</div>
-                    </div>
-                    <button
-                        onClick={onLogout}
-                        className="w-full border border-[var(--color-rust)]/30 text-[var(--color-rust)] hover:bg-[var(--color-rust)] hover:text-[var(--color-cream)] py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                        <LogOut size={16} /> Logout
-                    </button>
+                <div className="rounded-2xl p-5 bg-yellow-100">
+                  <div className="text-xs font-bold uppercase tracking-wider text-yellow-800">Pending Orders</div>
+                  <div className="text-4xl font-black font-mono text-yellow-700 mt-1">{stats.pendingOrders}</div>
                 </div>
-            </aside>
+                <div className="rounded-2xl p-5 text-white bg-[var(--color-sage)]">
+                  <div className="text-xs font-bold uppercase tracking-wider opacity-80">Total Books</div>
+                  <div className="text-4xl font-black font-mono mt-1">{stats.totalBooks}</div>
+                </div>
+                <div className="rounded-2xl p-5 bg-white border border-[var(--color-ldust)]">
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)]">Total Vendors</div>
+                  <div className="text-4xl font-black font-mono text-[var(--color-ink)] mt-1">{stats.totalVendors}</div>
+                </div>
+                <div className="rounded-2xl p-5 text-white" style={{ background: stats.pendingListings > 0 ? RUST : '#ffffff' }}>
+                  <div className={`text-xs font-bold uppercase tracking-wider ${stats.pendingListings > 0 ? 'opacity-90' : 'text-[var(--color-dust)]'}`}>Pending Listings</div>
+                  <div className={`text-4xl font-black font-mono mt-1 ${stats.pendingListings > 0 ? 'text-white' : 'text-[var(--color-ink)]'}`}>{stats.pendingListings}</div>
+                </div>
+                <div className="rounded-2xl p-5 bg-amber-100">
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber-800">Total Users</div>
+                  <div className="text-4xl font-black font-mono text-amber-700 mt-1">{stats.totalUsers}</div>
+                </div>
+              </div>
 
-            {/* RIGHT CONTENT AREA */}
-            <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--color-cream)]">
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden">
+                <div className="px-5 py-4 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] font-bold">Recent 10 Orders</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-[11px] uppercase tracking-wider text-[var(--color-dust)] border-b border-[var(--color-ldust)]">
+                      <tr>
+                        <th className="px-5 py-3">Order#</th>
+                        <th className="px-5 py-3">Buyer</th>
+                        <th className="px-5 py-3">Book</th>
+                        <th className="px-5 py-3">Amount</th>
+                        <th className="px-5 py-3">Status</th>
+                        <th className="px-5 py-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-ldust)]">
+                      {recentOrders.map(o => {
+                        const buyer = usersById[o.buyer_id]?.full_name || o.delivery_name || 'Guest'
+                        const dt = tsToDate(o.placed_at) || new Date()
+                        return (
+                          <tr key={o.id} className="hover:bg-[var(--color-paper)]">
+                            <td className="px-5 py-3 font-mono font-bold text-[var(--color-rust)]">{o.order_number || o.id}</td>
+                            <td className="px-5 py-3 font-bold text-[var(--color-ink)]">{buyer}</td>
+                            <td className="px-5 py-3">{o.book_title || o.title || '-'}</td>
+                            <td className="px-5 py-3 font-mono font-bold text-[var(--color-sage)]">{money(o.price_paid ?? o.our_price ?? o.amount)}</td>
+                            <td className="px-5 py-3">{o.status || '-'}</td>
+                            <td className="px-5 py-3 text-xs text-[var(--color-dust)]">{dt.toLocaleString('en-IN')}</td>
+                          </tr>
+                        )
+                      })}
+                      {!recentOrders.length && (
+                        <tr><td colSpan={6} className="px-5 py-10 text-center text-[var(--color-dust)]">No orders yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
-                {/* TOP BAR */}
-                <header className="sticky top-0 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] px-6 py-4 z-10 flex justify-between items-center shrink-0">
-                    <h1 className="font-display font-bold text-[22px] text-[var(--color-ink)] capitalize">
-                        {activeSection}
-                    </h1>
-                    <div className="flex items-center gap-6 text-[var(--color-dust)] text-sm font-bold">
-                        <div className="flex items-center gap-2">
-                            <Clock size={16} /> {currentTime}
-                        </div>
-                        <button onClick={fetchData} className="hover:text-[var(--color-rust)] transition-colors p-1" title="Refresh Data">
-                            <RefreshCw size={18} className={statsLoading ? "animate-spin text-[var(--color-rust)]" : ""} />
-                        </button>
-                        <button className="relative hover:text-[var(--color-rust)] transition-colors p-1" title="Notifications">
-                            <Bell size={18} />
-                            {stats.pendingListings > 0 && (
-                                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-                            )}
-                        </button>
-                    </div>
-                </header>
-
-                {/* SECTION CONTENT */}
-                <div className="flex-1 overflow-y-auto p-6">
-
-                    {/* DASHBOARD SECTION */}
-                    {activeSection === "dashboard" && (
-                        <div className="space-y-8 max-w-7xl mx-auto">
-
-                            {/* 6 Grid Stats Area */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                                {/* Card 1: Total Orders */}
-                                <div className="bg-[var(--color-ink)] p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col">
-                                    <ClipboardList className="absolute -right-4 -bottom-4 text-white/5" size={120} />
-                                    <div className="text-[var(--color-ldust)] text-sm font-bold tracking-wider uppercase mb-2">Total Orders</div>
-                                    <div className="text-[var(--color-amber)] text-4xl font-black font-mono relative z-10">{statsLoading ? '-' : stats.totalOrders}</div>
-                                </div>
-
-                                {/* Card 2: Pending Orders */}
-                                <div className="bg-yellow-100 p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col">
-                                    <Clock className="absolute -right-4 -bottom-4 text-yellow-500/10" size={120} />
-                                    <div className="text-yellow-800 text-sm font-bold tracking-wider uppercase mb-2">Pending Orders</div>
-                                    <div className="text-yellow-600 text-4xl font-black font-mono relative z-10">{statsLoading ? '-' : stats.pendingOrders}</div>
-                                </div>
-
-                                {/* Card 3: Total Books */}
-                                <div className="bg-[var(--color-sage)] p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col">
-                                    <Book className="absolute -right-4 -bottom-4 text-white/10" size={120} />
-                                    <div className="text-white/80 text-sm font-bold tracking-wider uppercase mb-2">Total Books</div>
-                                    <div className="text-white text-4xl font-black font-mono relative z-10">{statsLoading ? '-' : stats.totalBooks}</div>
-                                </div>
-
-                                {/* Card 4: Total Vendors */}
-                                <div className="bg-[var(--color-dust)] p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col">
-                                    <Store className="absolute -right-4 -bottom-4 text-white/10" size={120} />
-                                    <div className="text-white/80 text-sm font-bold tracking-wider uppercase mb-2">Total Vendors</div>
-                                    <div className="text-white text-4xl font-black font-mono relative z-10">{statsLoading ? '-' : stats.totalVendors}</div>
-                                </div>
-
-                                {/* Card 5: Pending Listings */}
-                                <div className={`p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col ${stats.pendingListings > 0 ? 'bg-[var(--color-rust)]' : 'bg-[var(--color-paper)] border border-[var(--color-ldust)]'}`}>
-                                    <Tag className={`absolute -right-4 -bottom-4 ${stats.pendingListings > 0 ? 'text-white/10' : 'text-[var(--color-ldust)]/30'}`} size={120} />
-                                    <div className={`${stats.pendingListings > 0 ? 'text-white/80' : 'text-[var(--color-dust)]'} text-sm font-bold tracking-wider uppercase mb-2`}>Pending Listings</div>
-                                    <div className={`${stats.pendingListings > 0 ? 'text-white' : 'text-[var(--color-ink)]'} text-4xl font-black font-mono relative z-10`}>{statsLoading ? '-' : stats.pendingListings}</div>
-                                </div>
-
-                                {/* Card 6: Total Users */}
-                                <div className="bg-amber-100 p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col">
-                                    <Users className="absolute -right-4 -bottom-4 text-amber-500/10" size={120} />
-                                    <div className="text-amber-800 text-sm font-bold tracking-wider uppercase mb-2">Total Users</div>
-                                    <div className="text-amber-600 text-4xl font-black font-mono relative z-10">{statsLoading ? '-' : stats.totalUsers}</div>
-                                </div>
-                            </div>
-
-                            {/* Pending Alert Area */}
-                            {stats.pendingListings > 0 && (
-                                <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl flex items-center justify-between shadow-sm">
-                                    <div className="flex items-center gap-4">
-                                        <AlertCircle className="text-amber-600" size={28} />
-                                        <div>
-                                            <h4 className="font-bold text-amber-800 text-lg">{stats.pendingListings} books waiting for your review!</h4>
-                                            <p className="text-amber-700 text-sm">Please review the condition proofs submitted by users.</p>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setActiveSection("listings")} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 text-sm font-bold rounded-xl transition-colors shadow-sm">
-                                        Review Now
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Add Elements Actions */}
-                            <div className="flex gap-4 mb-6">
-                                <button className="bg-[var(--color-ink)] text-white px-5 py-3 text-sm font-bold rounded-xl hover:bg-black transition-colors shadow-sm" onClick={() => toast.info('Add Book - Coming Soon')}>Add New Book</button>
-                                <button className="bg-[var(--color-ink)] text-white px-5 py-3 text-sm font-bold rounded-xl hover:bg-black transition-colors shadow-sm" onClick={() => toast.info('Add Vendor - Coming Soon')}>Add Vendor</button>
-                                <button className="border-2 border-[var(--color-ink)] text-[var(--color-ink)] px-5 py-3 text-sm font-bold rounded-xl hover:bg-[var(--color-paper)] transition-colors shadow-sm" onClick={exportCSV}>Export Orders</button>
-                            </div>
-
-                            {/* Recent Orders Area */}
-                            <div>
-                                <h2 className="font-display text-xl font-bold text-[var(--color-ink)] mb-4">Recent Orders</h2>
-                                <div className="bg-white rounded-xl border border-[var(--color-ldust)] overflow-hidden shadow-sm">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-[var(--color-paper)] text-[var(--color-dust)] font-bold uppercase tracking-wider text-[11px] border-b border-[var(--color-ldust)]">
-                                            <tr>
-                                                <th className="px-5 py-4">Order No</th>
-                                                <th className="px-5 py-4">Buyer Name</th>
-                                                <th className="px-5 py-4">Book Title</th>
-                                                <th className="px-5 py-4">Price Paid</th>
-                                                <th className="px-5 py-4">Status</th>
-                                                <th className="px-5 py-4">Date</th>
-                                                <th className="px-5 py-4 text-right">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-[var(--color-ldust)]">
-                                            {recentOrders.map(order => (
-                                                <tr key={order.id} className="hover:bg-[var(--color-paper)] transition-colors">
-                                                    <td className="px-5 py-4 font-mono font-bold text-[var(--color-rust)]">{order.order_number}</td>
-                                                    <td className="px-5 py-4 font-bold text-[var(--color-ink)]">{order.users?.full_name || 'Guest'}</td>
-                                                    <td className="px-5 py-4">
-                                                        <div className="truncate max-w-[200px]" title={order.book_title}>{order.book_title}</div>
-                                                    </td>
-                                                    <td className="px-5 py-4 font-mono text-[var(--color-sage)] font-bold">₹{order.price_paid}</td>
-                                                    <td className="px-5 py-4">
-                                                        <span className={`px-3 py-1 rounded-full text-[10px] uppercase font-bold text-white ${statusColors[order.status] || "bg-gray-500"}`}>
-                                                            {order.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-4 text-[var(--color-dust)] text-xs">{new Date(order.placed_at).toLocaleDateString()}</td>
-                                                    <td className="px-5 py-4 text-right">
-                                                        <button onClick={() => { setSelectedOrder(order); setAdminNotes(order.admin_notes || ""); setTrackingNo(order.tracking_no || ""); }} className="inline-flex text-[var(--color-ink)] hover:text-[var(--color-rust)] p-2 rounded-lg bg-gray-50 hover:bg-gray-200 border border-gray-100 transition-colors">
-                                                            <Eye size={18} />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    {recentOrders.length === 0 && (
-                                        <div className="p-8 text-center text-[var(--color-dust)] py-12">No recent orders found.</div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+          {/* ORDERS (REAL TIME) */}
+          {active === 'orders' && (
+            <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden max-w-7xl mx-auto">
+              <div className="px-5 py-4 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] flex items-center justify-between">
+                <span className="font-bold">Orders (real time)</span>
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={e => setOrderSearch(e.target.value)}
+                  placeholder="Search by order# or buyer..."
+                  className="border border-[var(--color-ldust)] rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-[var(--color-rust)]"
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-[11px] uppercase tracking-wider text-[var(--color-dust)] border-b border-[var(--color-ldust)]">
+                    <tr>
+                      <th className="px-5 py-3">Order#</th>
+                      <th className="px-5 py-3">Buyer</th>
+                      <th className="px-5 py-3">Book</th>
+                      <th className="px-5 py-3">Amount</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-ldust)]">
+                    {orders.filter(o => {
+                      if (!orderSearch) return true;
+                      const q = orderSearch.toLowerCase()
+                      const b = (usersById[o.buyer_id]?.full_name || o.delivery_name || '').toLowerCase()
+                      const n = (o.order_number || o.id || '').toLowerCase()
+                      return b.includes(q) || n.includes(q)
+                    }).map(o => {
+                      const buyer = usersById[o.buyer_id]?.full_name || o.delivery_name || 'Guest'
+                      const dt = tsToDate(o.placed_at) || new Date()
+                      const status = (o.status || 'placed').toLowerCase()
+                      return (
+                        <tr key={o.id} className="hover:bg-[var(--color-paper)]">
+                          <td className="px-5 py-3 font-mono font-bold text-[var(--color-rust)]">{o.order_number || o.id}</td>
+                          <td className="px-5 py-3">
+                            <div className="font-bold text-[var(--color-ink)]">{buyer}</div>
+                            <div className="text-xs text-[var(--color-dust)]">{usersById[o.buyer_id]?.phone || o.delivery_phone || ''}</div>
+                          </td>
+                          <td className="px-5 py-3">{o.book_title || o.title || '-'}</td>
+                          <td className="px-5 py-3 font-mono font-bold text-[var(--color-sage)]">{money(o.price_paid ?? o.our_price ?? o.amount)}</td>
+                          <td className="px-5 py-3">
+                            <select
+                              value={status}
+                              onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                              className="text-xs font-bold uppercase rounded-full px-3 py-1.5 bg-[var(--color-ink)] text-white"
+                            >
+                              <option value="placed">placed</option>
+                              <option value="confirmed">confirmed</option>
+                              <option value="dispatched">dispatched</option>
+                              <option value="delivered">delivered</option>
+                              <option value="cancelled">cancelled</option>
+                            </select>
+                          </td>
+                          <td className="px-5 py-3 text-xs text-[var(--color-dust)]">{dt.toLocaleString('en-IN')}</td>
+                        </tr>
+                      )
+                    })}
+                    {!orders.length && (
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-[var(--color-dust)]">No orders yet.</td></tr>
                     )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-                    {/* ORDERS SECTION */}
-                    {activeSection === "orders" && (
-                        <div className="space-y-6 max-w-7xl mx-auto h-full flex flex-col">
-                            <div className="flex flex-col md:flex-row gap-4 justify-between shrink-0 mb-2">
-                                <div className="flex gap-3 w-full md:w-auto">
-                                    <div className="relative flex-1 md:w-72">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-dust)]" size={18} />
-                                        <input type="text" placeholder="Search orders, buyer, title..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-[var(--color-ldust)] bg-white shadow-sm rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-rust)] transition-colors" />
-                                    </div>
-                                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-[var(--color-ldust)] bg-white shadow-sm rounded-xl text-sm font-bold text-[var(--color-ink)] px-4 py-3 focus:outline-none focus:border-[var(--color-rust)] cursor-pointer">
-                                        <option value="All">All Statuses</option>
-                                        <option value="placed">Placed</option>
-                                        <option value="reviewing">Reviewing</option>
-                                        <option value="confirmed">Confirmed</option>
-                                        <option value="dispatched">Dispatched</option>
-                                        <option value="delivered">Delivered</option>
-                                        <option value="cancelled">Cancelled</option>
-                                    </select>
-                                </div>
-                                <button onClick={exportCSV} className="bg-[var(--color-ink)] text-white hover:bg-black px-6 py-3 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
-                                    <Download size={18} /> Export CSV
+          {/* LISTINGS (REAL TIME) */}
+          {active === 'listings' && (
+            <div className="space-y-4 max-w-7xl mx-auto">
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden">
+                <div className="px-5 py-3 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] flex items-center justify-between">
+                  <span className="font-bold">Listings (real time)</span>
+                  <div className="flex bg-[var(--color-cream)] rounded-lg p-1 border border-[var(--color-ldust)]">
+                    {['All', 'Pending', 'Approved', 'Rejected'].map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setListingTab(t)}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors ${listingTab === t ? 'bg-[var(--color-ink)] text-white' : 'text-[var(--color-dust)] hover:text-[var(--color-ink)]'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-[11px] uppercase tracking-wider text-[var(--color-dust)] border-b border-[var(--color-ldust)]">
+                      <tr>
+                        <th className="px-5 py-3 w-16">Photo</th>
+                        <th className="px-5 py-3">Book</th>
+                        <th className="px-5 py-3">Seller</th>
+                        <th className="px-5 py-3">MRP</th>
+                        <th className="px-5 py-3">Area</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-ldust)]">
+                      {listings.filter(l => {
+                        if (listingTab === 'All') return true
+                        return (l.status || 'pending').toLowerCase() === listingTab.toLowerCase()
+                      }).map(l => (
+                        <tr key={l.id} className="hover:bg-[var(--color-paper)]">
+                          <td className="px-5 py-3">
+                            <img src={l.cover_url || l.photo_url || l.photo_1 || 'https://via.placeholder.com/60?text=No+Photo'} className="w-12 h-16 object-cover rounded shadow border border-[var(--color-ldust)] bg-[#D4C5A9]/20" alt="student-upload" />
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="font-bold text-[var(--color-ink)]">{l.title || '-'}</div>
+                            <div className="text-xs text-[var(--color-dust)]">{l.author || ''}</div>
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="font-bold text-[var(--color-ink)]">{usersById[listingUserId(l)]?.full_name || l.seller_name || 'Seller'}</div>
+                            <div className="text-xs text-[var(--color-dust)]">{usersById[listingUserId(l)]?.phone || l.phone || ''}</div>
+                          </td>
+                          <td className="px-5 py-3 font-mono font-bold text-[var(--color-sage)]">{money(l.mrp)}</td>
+                          <td className="px-5 py-3">{l.area || '-'}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex justify-end gap-2 items-center">
+                              {(l.status || 'pending').toLowerCase() === 'pending' && (
+                                <>
+                                  <button onClick={() => openApprove(l)} className="px-3 py-2 rounded-xl text-white font-bold text-xs" style={{ background: '#16a34a' }}>Approve</button>
+                                  <button onClick={() => openReject(l)} className="px-3 py-2 rounded-xl text-white font-bold text-xs" style={{ background: '#ef4444' }}>Reject</button>
+                                </>
+                              )}
+                              {(l.status || '').toLowerCase() !== 'pending' && (
+                                <span className={`text-xs font-bold uppercase ${l.status === 'approved' ? 'text-green-600' : 'text-red-600'}`}>{l.status}</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {!listings.filter(l => listingTab === 'All' || (l.status || 'pending').toLowerCase() === listingTab.toLowerCase()).length && (
+                        <tr><td colSpan={6} className="px-5 py-10 text-center text-[var(--color-dust)]">No listings found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Modal open={approveOpen} title="Approve listing" onClose={() => setApproveOpen(false)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2 flex justify-center mb-2">
+                    <img src={selectedListing?.photo_url || selectedListing?.cover_url || selectedListing?.photo_1 || 'https://via.placeholder.com/300?text=No+Photo'} className="h-48 object-contain bg-slate-100 border border-slate-200 rounded-lg p-2 shadow-sm" alt="Student Upload" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Vendor</div>
+                    <select value={approveVendorId} onChange={e => setApproveVendorId(e.target.value)} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      <option value="">Select vendor</option>
+                      {vendors.map(v => <option key={v.id} value={v.id}>{v.shop_name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Category</div>
+                    <select value={approveCategoryId} onChange={e => setApproveCategoryId(e.target.value)} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      <option value="">Select category</option>
+                      {categories.map(c => <option key={c.id} value={c.slug ?? c.id}>{c.name ?? c.slug ?? c.id}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">MRP</div>
+                    <input type="number" value={approveMrp} onChange={e => setApproveMrp(Number(e.target.value))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                  </div>
+                  <div className="rounded-2xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Live calculations</div>
+                    <div className="font-mono text-sm space-y-1">
+                      <div>Our Price: <span className="font-black text-[var(--color-sage)]">{money(approvePreview.our_price)}</span></div>
+                      <div>Vendor Earns: <span className="font-black">{money(approvePreview.vendor_earn)}</span></div>
+                      <div>Rebook Earns: <span className="font-black">{money(approvePreview.ri_earn)}</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setApproveOpen(false)} className="px-4 py-2 rounded-xl border border-[var(--color-ldust)] font-bold">Cancel</button>
+                  <button onClick={approveListing} className="px-4 py-2 rounded-xl text-white font-bold" style={{ background: RUST }}>Confirm Approve</button>
+                </div>
+              </Modal>
+
+              <Modal open={rejectOpen} title="Reject listing" onClose={() => setRejectOpen(false)}>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Reason (required)</div>
+                  <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm min-h-[140px]" />
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setRejectOpen(false)} className="px-4 py-2 rounded-xl border border-[var(--color-ldust)] font-bold">Cancel</button>
+                  <button onClick={rejectListing} className="px-4 py-2 rounded-xl text-white font-bold" style={{ background: '#ef4444' }}>Confirm Reject</button>
+                </div>
+              </Modal>
+            </div>
+          )}
+
+          {/* BOOKS (REAL TIME) */}
+          {active === 'books' && (
+            <div className="space-y-4 max-w-7xl mx-auto">
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="font-display font-black text-2xl text-[var(--color-ink)]">Books</div>
+                  <div className="text-sm text-[var(--color-dust)]">{books.length} total</div>
+                </div>
+                <button onClick={openAddBook} className="px-4 py-3 rounded-xl text-white font-bold" style={{ background: RUST }}>Add Book</button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-[11px] uppercase tracking-wider text-[var(--color-dust)] border-b border-[var(--color-ldust)]">
+                      <tr>
+                        <th className="px-5 py-3 w-16">Cover</th>
+                        <th className="px-5 py-3">Title</th>
+                        <th className="px-5 py-3">ISBN</th>
+                        <th className="px-5 py-3">MRP</th>
+                        <th className="px-5 py-3">Featured</th>
+                        <th className="px-5 py-3">Available</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-ldust)]">
+                      {books.map(b => {
+                        const cover = b.photo_url || b.cover_url || (b.isbn ? `https://covers.openlibrary.org/b/isbn/${b.isbn}-S.jpg` : 'https://via.placeholder.com/60?text=No+Cover')
+                        return (
+                          <tr key={b.id} className="hover:bg-[var(--color-paper)]">
+                            <td className="px-5 py-3">
+                              <img src={cover} className="w-10 h-14 object-cover rounded shadow-sm border border-[var(--color-ldust)] bg-[#D4C5A9]/20" alt="cover" />
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="font-bold text-[var(--color-ink)]">{b.title}</div>
+                              <div className="text-xs text-[var(--color-dust)]">{b.author}</div>
+                            </td>
+                            <td className="px-5 py-3 font-mono text-xs">{b.isbn || '-'}</td>
+                            <td className="px-5 py-3 font-mono font-bold text-[var(--color-sage)]">{money(b.mrp)}</td>
+                            <td className="px-5 py-3">
+                              <input type="checkbox" checked={!!b.is_featured} onChange={(e) => toggleBookField(b.id, 'is_featured', e.target.checked)} />
+                            </td>
+                            <td className="px-5 py-3">
+                              <input type="checkbox" checked={b.is_available ?? true} onChange={(e) => toggleBookField(b.id, 'is_available', e.target.checked)} />
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex justify-end gap-2">
+                                <button onClick={() => openEditBook(b)} className="px-3 py-2 rounded-xl border border-[var(--color-ldust)] font-bold text-xs">Edit</button>
+                                <button onClick={() => deleteBook(b)} className="px-3 py-2 rounded-xl text-white font-bold text-xs" style={{ background: '#ef4444' }}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {!books.length && (
+                        <tr><td colSpan={7} className="px-5 py-10 text-center text-[var(--color-dust)]">No books yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Modal open={bookModalOpen} title={bookEditing ? 'Edit book' : 'Add book'} onClose={() => setBookModalOpen(false)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['Title', 'title'],
+                    ['Author', 'author'],
+                    ['ISBN', 'isbn'],
+                    ['Publisher', 'publisher'],
+                    ['Edition', 'edition'],
+                  ].map(([label, key]) => (
+                    <div key={key}>
+                      <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">{label}</div>
+                      <input value={bookForm[key]} onChange={(e) => setBookForm((p: any) => ({ ...p, [key]: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                    </div>
+                  ))}
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Category</div>
+                    <select value={bookForm.category_id} onChange={(e) => setBookForm((p: any) => ({ ...p, category_id: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      {categories.map(c => <option key={c.id} value={c.slug ?? c.id}>{c.name ?? c.slug ?? c.id}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Vendor</div>
+                    <select value={bookForm.vendor_id} onChange={(e) => setBookForm((p: any) => ({ ...p, vendor_id: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      {vendors.map(v => <option key={v.id} value={v.id}>{v.shop_name}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">MRP</div>
+                    <input type="number" value={bookForm.mrp} onChange={(e) => setBookForm((p: any) => ({ ...p, mrp: Number(e.target.value) }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                  </div>
+
+                  <div className="rounded-2xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Live calculations</div>
+                    <div className="font-mono text-sm space-y-1">
+                      <div>Our Price: <span className="font-black text-[var(--color-sage)]">{money(pricesPreview.our_price)}</span></div>
+                      <div>Vendor Earns: <span className="font-black">{money(pricesPreview.vendor_earn)}</span></div>
+                      <div>Rebook Earns: <span className="font-black">{money(pricesPreview.ri_earn)}</span></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Condition</div>
+                    <select value={bookForm.condition} onChange={(e) => setBookForm((p: any) => ({ ...p, condition: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      <option value="like_new">like_new</option>
+                      <option value="good">good</option>
+                      <option value="fair">fair</option>
+                      <option value="poor">poor</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Stock</div>
+                    <input type="number" value={bookForm.stock} onChange={(e) => setBookForm((p: any) => ({ ...p, stock: Number(e.target.value) }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Description</div>
+                    <textarea value={bookForm.description} onChange={(e) => setBookForm((p: any) => ({ ...p, description: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm min-h-[100px]" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Cover URL</div>
+                    <input value={bookForm.cover_url} onChange={(e) => setBookForm((p: any) => ({ ...p, cover_url: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input id="featured" type="checkbox" checked={!!bookForm.is_featured} onChange={(e) => setBookForm((p: any) => ({ ...p, is_featured: e.target.checked }))} />
+                    <label htmlFor="featured" className="font-bold text-sm text-[var(--color-ink)]">Is Featured</label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input id="available" type="checkbox" checked={bookForm.is_available ?? true} onChange={(e) => setBookForm((p: any) => ({ ...p, is_available: e.target.checked }))} />
+                    <label htmlFor="available" className="font-bold text-sm text-[var(--color-ink)]">Is Available</label>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setBookModalOpen(false)} className="px-4 py-2 rounded-xl border border-[var(--color-ldust)] font-bold">Cancel</button>
+                  <button onClick={saveBook} className="px-4 py-2 rounded-xl text-white font-bold" style={{ background: RUST }}>{bookEditing ? 'Save changes' : 'Add book'}</button>
+                </div>
+              </Modal>
+            </div>
+          )}
+
+          {/* VENDORS */}
+          {active === 'vendors' && (
+            <div className="space-y-4 max-w-7xl mx-auto">
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="font-display font-black text-2xl text-[var(--color-ink)]">Vendors</div>
+                  <div className="text-sm text-[var(--color-dust)]">{vendors.length} total</div>
+                </div>
+                <button onClick={openAddVendor} className="px-4 py-3 rounded-xl text-white font-bold" style={{ background: RUST }}>Add Vendor</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {vendors.map(v => (
+                  <div key={v.id} className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={v.shop_image || 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=900'} alt={v.shop_name} className="w-full h-[140px] object-cover" />
+                    <div className="p-4">
+                      <div className="font-bold text-[var(--color-ink)]">{v.shop_name}</div>
+                      <div className="text-xs text-[var(--color-dust)] mt-1">📍 {v.area || '-'}</div>
+                      <div className="text-xs text-[var(--color-sage)] mt-1 font-bold">⭐ {v.rating || 4.5} • {v.badge || 'Verified'}</div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <select value={v.badge || 'Verified'} onChange={(e) => updateVendorBadge(v.id, e.target.value)} className="border border-[var(--color-ldust)] rounded-xl px-3 py-2 text-xs font-bold">
+                          {['Verified', 'Top Rated', 'Fast Pickup', 'Best Deals'].map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                        <div className="flex gap-2">
+                          <button onClick={() => openEditVendor(v)} className="px-3 py-2 rounded-xl border border-[var(--color-ldust)] font-bold text-xs">Edit</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!vendors.length && (
+                  <div className="text-[var(--color-dust)]">No vendors yet.</div>
+                )}
+              </div>
+
+              <Modal open={vendorModalOpen} title={vendorEditing ? 'Edit vendor' : 'Add vendor'} onClose={() => setVendorModalOpen(false)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['Shop Name', 'shop_name'],
+                    ['Owner Name', 'owner_name'],
+                    ['Area', 'area'],
+                    ['Phone', 'phone'],
+                    ['Shop Image URL', 'shop_image'],
+                  ].map(([label, key]) => (
+                    <div key={key} className={key === 'shop_image' ? 'md:col-span-2' : ''}>
+                      <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">{label}</div>
+                      <input value={vendorForm[key]} onChange={(e) => setVendorForm((p: any) => ({ ...p, [key]: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                    </div>
+                  ))}
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Badge</div>
+                    <select value={vendorForm.badge} onChange={(e) => setVendorForm((p: any) => ({ ...p, badge: e.target.value }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm">
+                      {['Verified', 'Top Rated', 'Fast Pickup', 'Best Deals'].map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Rating</div>
+                    <input type="number" step="0.1" value={vendorForm.rating} onChange={(e) => setVendorForm((p: any) => ({ ...p, rating: Number(e.target.value) }))} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm" />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setVendorModalOpen(false)} className="px-4 py-2 rounded-xl border border-[var(--color-ldust)] font-bold">Cancel</button>
+                  <button onClick={saveVendor} className="px-4 py-2 rounded-xl text-white font-bold" style={{ background: RUST }}>{vendorEditing ? 'Save changes' : 'Add vendor'}</button>
+                </div>
+              </Modal>
+            </div>
+          )}
+
+          {/* USERS */}
+          {active === 'users' && (
+            <div className="space-y-4 max-w-7xl mx-auto">
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="font-display font-black text-2xl text-[var(--color-ink)]">Users</div>
+                  <div className="text-sm text-[var(--color-dust)]">{users.length} total</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-[11px] uppercase tracking-wider text-[var(--color-dust)] border-b border-[var(--color-ldust)]">
+                      <tr>
+                        <th className="px-5 py-3">User</th>
+                        <th className="px-5 py-3">Email</th>
+                        <th className="px-5 py-3">Role</th>
+                        <th className="px-5 py-3">Joined</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-ldust)]">
+                      {users.map(u => {
+                        const dt = tsToDate(u.created_at)
+                        return (
+                          <tr key={u.id} className="hover:bg-[var(--color-paper)]">
+                            <td className="px-5 py-3">
+                              <div className="font-bold text-[var(--color-ink)]">{u.full_name || 'User'}</div>
+                              <div className="text-xs text-[var(--color-dust)]">{u.phone || ''}</div>
+                            </td>
+                            <td className="px-5 py-3 text-[var(--color-dust)]">{u.email || ''}</td>
+                            <td className="px-5 py-3">
+                              <select value={u.role || 'buyer'} onChange={(e) => updateUserRole(u.id, e.target.value)} className="border border-[var(--color-ldust)] rounded-xl px-3 py-2 text-xs font-bold uppercase">
+                                <option value="buyer">buyer</option>
+                                <option value="seller">seller</option>
+                                <option value="admin">admin</option>
+                              </select>
+                            </td>
+                            <td className="px-5 py-3 text-xs text-[var(--color-dust)]">{dt ? dt.toLocaleDateString('en-IN') : '-'}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => { setNotifyUser(u); setNotifyMessage(''); setNotifyOpen(true) }}
+                                  className="px-3 py-2 rounded-xl text-white font-bold text-xs"
+                                  style={{ background: INK }}
+                                >
+                                  Send notification
                                 </button>
-                            </div>
-
-                            <div className="bg-white border border-[var(--color-ldust)] rounded-2xl shadow-sm flex-1 overflow-hidden flex flex-col">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left whitespace-nowrap">
-                                        <thead className="bg-[var(--color-paper)] text-[var(--color-dust)] font-bold uppercase tracking-wider text-[11px] border-b border-[var(--color-ldust)]">
-                                            <tr>
-                                                <th className="px-6 py-4" style={{ width: "15%" }}>Order No</th>
-                                                <th className="px-6 py-4" style={{ width: "20%" }}>Buyer</th>
-                                                <th className="px-6 py-4" style={{ width: "25%" }}>Book</th>
-                                                <th className="px-6 py-4" style={{ width: "10%" }}>Price</th>
-                                                <th className="px-6 py-4" style={{ width: "10%" }}>Status</th>
-                                                <th className="px-6 py-4" style={{ width: "10%" }}>Date</th>
-                                                <th className="px-6 py-4 text-right" style={{ width: "10%" }}>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-[var(--color-ldust)]">
-                                            {filteredOrders.map(order => (
-                                                <tr key={order.id} className="hover:bg-[var(--color-paper)] transition-colors">
-                                                    <td className="px-6 py-4 align-top">
-                                                        <div className="font-mono font-bold text-[var(--color-rust)] cursor-pointer hover:underline" onClick={() => { setSelectedOrder(order); setAdminNotes(order.admin_notes || ""); setTrackingNo(order.tracking_no || ""); }}>{order.order_number}</div>
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top">
-                                                        <div className="font-bold text-[var(--color-ink)]">{order.users?.full_name || order.delivery_name || 'Guest'}</div>
-                                                        <div className="text-[11px] text-[var(--color-dust)] mt-1">{order.users?.phone || order.delivery_phone}</div>
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top">
-                                                        <div className="truncate max-w-[220px] font-bold text-[var(--color-ink)]" title={order.book_title}>{order.book_title}</div>
-                                                        <div className="text-[11px] text-[var(--color-dust)] mt-1">{order.delivery_area}</div>
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top font-mono">
-                                                        <div className="text-[10px] text-[var(--color-dust)] line-through">₹{order.mrp}</div>
-                                                        <div className="font-bold text-[var(--color-sage)] text-[15px]">₹{order.price_paid}</div>
-                                                        <div className="text-[10px] text-[var(--color-dust)]">Save ₹{order.savings}</div>
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top">
-                                                        <select
-                                                            value={order.status}
-                                                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                                                            className={`text-[11px] uppercase tracking-wider font-bold rounded-full px-3 py-1.5 outline-none border-none cursor-pointer text-white appearance-none ${statusColors[order.status] || "bg-gray-500"}`}
-                                                        >
-                                                            <option value="placed">Placed</option>
-                                                            <option value="reviewing">Reviewing</option>
-                                                            <option value="confirmed">Confirmed</option>
-                                                            <option value="dispatched">Dispatched</option>
-                                                            <option value="delivered">Delivered</option>
-                                                            <option value="cancelled">Cancelled</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top text-xs font-medium text-[var(--color-dust)]">
-                                                        {new Date(order.placed_at).toLocaleDateString()}
-                                                    </td>
-                                                    <td className="px-6 py-4 align-top">
-                                                        <div className="flex justify-end gap-2">
-                                                            <button onClick={() => { setSelectedOrder(order); setAdminNotes(order.admin_notes || ""); setTrackingNo(order.tracking_no || ""); }} className="bg-[var(--color-paper)] border border-[var(--color-ldust)] text-[var(--color-ink)] p-2 rounded-lg hover:bg-[var(--color-ldust)] transition-colors shadow-sm">
-                                                                <Eye size={16} />
-                                                            </button>
-                                                            <a href={`https://wa.me/91${order.users?.phone || order.delivery_phone}?text=Regarding your Rebook India order ${order.order_number}...`} target="_blank" rel="noopener noreferrer" className="bg-[#25D366]/10 border border-[#25D366]/20 text-[#25D366] p-2 rounded-lg hover:bg-[#25D366] hover:text-white transition-colors shadow-sm">
-                                                                <MessageCircle size={16} />
-                                                            </a>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    {!ordersLoading && filteredOrders.length === 0 && (
-                                        <div className="p-16 text-center text-[var(--color-dust)] text-lg">
-                                            No orders match your filter criteria.
-                                        </div>
-                                    )}
-                                    {ordersLoading && (
-                                        <div className="p-16 text-center text-[var(--color-dust)] text-lg">
-                                            Loading orders...
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div >
-                    )
-                    }
-
-                    {/* LISTINGS SECTION */}
-                    {
-                        activeSection === "listings" && (
-                            <div className="space-y-6 max-w-7xl mx-auto h-full flex flex-col">
-                                <div className="flex flex-col md:flex-row gap-4 justify-between shrink-0 mb-2">
-                                    <div className="flex bg-white border border-[var(--color-ldust)] p-1 rounded-xl shadow-sm text-sm font-bold w-full md:w-auto overflow-x-auto">
-                                        {['All', 'Pending', 'Approved', 'Listed', 'Rejected', 'Expired'].map(tab => {
-                                            const count = tab === 'All' ? listings.length : listings.filter(l => l.status === tab.toLowerCase()).length;
-                                            const colors: any = {
-                                                "Pending": "bg-amber-100 text-amber-800",
-                                                "Approved": "bg-sage-100 text-sage-800",
-                                                "Listed": "bg-blue-100 text-blue-800",
-                                                "Rejected": "bg-red-100 text-red-800",
-                                                "Expired": "bg-gray-100 text-gray-800"
-                                            };
-                                            return (
-                                                <button
-                                                    key={tab}
-                                                    onClick={() => setListingsStatusFilter(tab)}
-                                                    className={`px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${listingsStatusFilter === tab ? "bg-[var(--color-rust)] text-white shadow-sm" : "text-[var(--color-dust)] hover:text-[var(--color-ink)] hover:bg-gray-50"}`}
-                                                >
-                                                    {tab} <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] bg-white text-[var(--color-ink)]`}>{count}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="relative md:w-72 shrink-0">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-dust)]" size={18} />
-                                        <input type="text" placeholder="Search by title or seller name" value={listingsSearchQuery} onChange={e => setListingsSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-[var(--color-ldust)] bg-white shadow-sm rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-rust)] transition-colors" />
-                                    </div>
-                                </div >
-
-                                <div className="bg-white border border-[var(--color-ldust)] rounded-2xl shadow-sm flex-1 overflow-hidden flex flex-col">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead className="bg-[var(--color-paper)] text-[var(--color-dust)] font-bold uppercase tracking-wider text-[11px] border-b border-[var(--color-ldust)]">
-                                                <tr>
-                                                    <th className="px-6 py-4 w-[220px]">Book</th>
-                                                    <th className="px-6 py-4 w-[160px]">Seller</th>
-                                                    <th className="px-6 py-4 w-[140px]">Details</th>
-                                                    <th className="px-6 py-4 w-[120px]">Area</th>
-                                                    <th className="px-6 py-4 w-[80px]">Photos</th>
-                                                    <th className="px-6 py-4 w-[120px]">Status</th>
-                                                    <th className="px-6 py-4 w-[200px] text-right">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-[var(--color-ldust)] text-[13px]">
-                                                {listingsLoading ? (
-                                                    [...Array(5)].map((_, i) => (
-                                                        <tr key={i} className="animate-pulse">
-                                                            <td className="px-6 py-4"><div className="h-10 bg-gray-200 rounded-md"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded-md w-3/4 mb-2"></div><div className="h-3 bg-gray-200 rounded-md w-1/2"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded-md w-1/2"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded-md w-full"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-8 w-8 bg-gray-200 rounded-md"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-6 w-16 bg-gray-200 rounded-full"></div></td>
-                                                            <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded-md w-full"></div></td>
-                                                        </tr>
-                                                    ))
-                                                ) : filteredListings.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={7} className="px-6 py-16 text-center text-[var(--color-dust)]">
-                                                            <Tag size={32} className="mx-auto mb-3 opacity-20" />
-                                                            <div className="text-lg mb-2">No listings found</div>
-                                                            <button onClick={loadListings} className="text-[var(--color-rust)] hover:underline font-bold text-sm">Refresh list</button>
-                                                        </td>
-                                                    </tr>
-                                                ) : (
-                                                    filteredListings.map(listing => (
-                                                        <tr key={listing.id} className="hover:bg-gray-50 transition-colors">
-                                                            <td className="px-6 py-4 flex gap-3 items-center">
-                                                                {listing.photo_1 ? (
-                                                                    // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={listing.photo_1} alt="Cover" className="w-[44px] h-[60px] object-cover rounded-md shadow-sm border border-[var(--color-ldust)] shrink-0" />
-                                                                ) : (
-                                                                    <div className="w-[44px] h-[60px] bg-gray-100 rounded-md border border-[var(--color-ldust)] flex items-center justify-center shrink-0 text-xl">📚</div>
-                                                                )}
-                                                                <div>
-                                                                    <div className="font-bold text-[var(--color-ink)] line-clamp-2 leading-tight" title={listing.title}>{listing.title}</div>
-                                                                    <div className="text-[11px] text-[var(--color-dust)] mt-1">{listing.author}</div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="font-bold text-[var(--color-ink)]">{listing.users?.full_name || 'Unknown Seller'}</div>
-                                                                <div className="text-[11px] text-[var(--color-dust)] mt-1">{listing.users?.phone || '-'}</div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="font-bold text-[var(--color-sage)] font-mono">₹{listing.mrp}</div>
-                                                                <div className="text-[10px] mt-1 flex gap-1 items-center flex-wrap">
-                                                                    <span className={`px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-bold ${listing.condition === 'like_new' ? 'bg-green-100 text-green-700' : listing.condition === 'good' ? 'bg-blue-100 text-blue-700' : listing.condition === 'fair' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                                                        {listing.condition?.replace('_', ' ')}
-                                                                    </span>
-                                                                    <span className="text-[var(--color-dust)] block truncate max-w-[100px]" title={listing.categories?.name}>{listing.categories?.name}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="text-[var(--color-ink)] truncate max-w-[100px]" title={listing.area}>{listing.area}</div>
-                                                                <div className="text-[10px] text-[var(--color-dust)] mt-1">{new Date(listing.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex gap-1 items-center">
-                                                                    {listing.photo_1 ? (
-                                                                        <ImageIcon className="text-[var(--color-sage)]" size={16} />
-                                                                    ) : (
-                                                                        <ImageIcon className="text-[var(--color-ldust)]" size={16} />
-                                                                    )}
-                                                                </div>
-                                                                <div className="text-[10px] text-[var(--color-dust)] mt-1">{[listing.photo_1, listing.photo_2, listing.photo_3].filter(Boolean).length} photos</div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${listingStatusColors[listing.status] || 'bg-gray-200 text-gray-800'}`}>
-                                                                    {listing.status}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-right">
-                                                                <div className="flex justify-end gap-2">
-                                                                    {listing.status === 'pending' && (
-                                                                        <>
-                                                                            <button className="text-white bg-green-500 hover:bg-green-600 p-1.5 rounded-md transition-colors shadow-sm" title="Approve" onClick={() => handleListingStatusChange(listing.id, 'approved')}>
-                                                                                <Check size={16} />
-                                                                            </button>
-                                                                            <button className="text-white bg-red-500 hover:bg-red-600 p-1.5 rounded-md transition-colors shadow-sm" title="Reject" onClick={() => handleListingStatusChange(listing.id, 'rejected')}>
-                                                                                <X size={16} />
-                                                                            </button>
-                                                                        </>
-                                                                    )}
-                                                                    {(listing.status === 'approved' || listing.status === 'listed') && (
-                                                                        <button className="text-white bg-orange-500 hover:bg-orange-600 p-1.5 rounded-md transition-colors shadow-sm" title="Mark Sold" onClick={() => handleListingStatusChange(listing.id, 'expired')}>
-                                                                            <Tag size={16} />
-                                                                        </button>
-                                                                    )}
-                                                                    {listing.status === 'rejected' && (
-                                                                        <button className="text-white bg-amber-500 hover:bg-amber-600 p-1.5 rounded-md transition-colors shadow-sm" title="Reconsider" onClick={() => handleListingStatusChange(listing.id, 'pending')}>
-                                                                            <RefreshCw size={16} />
-                                                                        </button>
-                                                                    )}
-                                                                    <button className="text-[var(--color-ink)] bg-gray-100 border border-gray-200 hover:bg-gray-200 p-1.5 rounded-md transition-colors shadow-sm" title="View Details" onClick={() => toast.info("View listing details")}>
-                                                                        <Eye size={16} />
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div >
-                                </div >
-                            </div >
+                              </div>
+                            </td>
+                          </tr>
                         )
-                    }
+                      })}
+                      {!users.length && (
+                        <tr><td colSpan={5} className="px-5 py-10 text-center text-[var(--color-dust)]">No users yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-                    {/* OTHER PLACEHOLDERS */}
-                    {
-                        ["books", "vendors", "users", "settings"].includes(activeSection) && (
-                            <div className="h-full flex flex-col items-center justify-center text-[var(--color-dust)] min-h-[500px]">
-                                <AlertCircle size={64} className="mb-6 text-[var(--color-ldust)]" />
-                                <h2 className="text-2xl font-bold font-display text-[var(--color-ink)] mb-3 capitalize">{activeSection} Module</h2>
-                                <p className="text-lg">This module is part of the next development phase.</p>
-                            </div>
-                        )
-                    }
+              <Modal open={notifyOpen} title="Send notification" onClose={() => setNotifyOpen(false)}>
+                <div className="text-sm text-[var(--color-dust)] mb-3">
+                  To: <span className="font-bold text-[var(--color-ink)]">{notifyUser?.full_name || notifyUser?.email || notifyUser?.id}</span>
+                </div>
+                <textarea value={notifyMessage} onChange={(e) => setNotifyMessage(e.target.value)} className="w-full border border-[var(--color-ldust)] rounded-xl px-3 py-3 text-sm min-h-[140px]" placeholder="Type message..." />
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setNotifyOpen(false)} className="px-4 py-2 rounded-xl border border-[var(--color-ldust)] font-bold">Cancel</button>
+                  <button onClick={sendNotification} className="px-4 py-2 rounded-xl text-white font-bold" style={{ background: RUST }}>Send</button>
+                </div>
+              </Modal>
+            </div>
+          )}
 
-                </div >
-            </main >
+          {/* SETTINGS */}
+          {active === 'settings' && (
+            <div className="space-y-6 max-w-3xl mx-auto">
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] p-6">
+                <div className="font-display font-black text-xl text-[var(--color-ink)]">Database stats</div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)]">Orders</div>
+                    <div className="font-mono font-black text-2xl text-[var(--color-ink)]">{stats.totalOrders}</div>
+                  </div>
+                  <div className="rounded-xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)]">Books</div>
+                    <div className="font-mono font-black text-2xl text-[var(--color-ink)]">{stats.totalBooks}</div>
+                  </div>
+                  <div className="rounded-xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)]">Users</div>
+                    <div className="font-mono font-black text-2xl text-[var(--color-ink)]">{stats.totalUsers}</div>
+                  </div>
+                  <div className="rounded-xl bg-[var(--color-paper)] border border-[var(--color-ldust)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-dust)]">Vendors</div>
+                    <div className="font-mono font-black text-2xl text-[var(--color-ink)]">{stats.totalVendors}</div>
+                  </div>
+                </div>
+              </div>
 
-            {/* ORDER DETAIL MODAL */}
-            {
-                selectedOrder && (
-                    <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] p-6 space-y-4">
+                <div className="font-display font-black text-xl text-[var(--color-ink)]">Export CSV</div>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    className="px-4 py-2 rounded-xl text-white font-bold"
+                    style={{ background: INK }}
+                    onClick={() => exportCsv(orders.map(o => ({
+                      order_number: o.order_number || o.id,
+                      buyer: usersById[o.buyer_id]?.full_name || o.delivery_name || '',
+                      book: o.book_title || '',
+                      amount: o.price_paid ?? o.amount ?? '',
+                      status: o.status || '',
+                      placed_at: tsToDate(o.placed_at)?.toISOString() || '',
+                    })), 'orders.csv')}
+                  >
+                    Export Orders
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-xl text-white font-bold"
+                    style={{ background: INK }}
+                    onClick={() => exportCsv(books.map(b => ({
+                      title: b.title,
+                      author: b.author,
+                      isbn: b.isbn,
+                      mrp: b.mrp,
+                      our_price: b.our_price,
+                      category_id: b.category_id,
+                      vendor_id: b.vendor_id,
+                      is_available: b.is_available,
+                      is_featured: b.is_featured,
+                    })), 'books.csv')}
+                  >
+                    Export Books
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-xl text-white font-bold"
+                    style={{ background: INK }}
+                    onClick={() => exportCsv(users.map(u => ({
+                      full_name: u.full_name,
+                      email: u.email,
+                      phone: u.phone,
+                      role: u.role,
+                      created_at: tsToDate(u.created_at)?.toISOString() || '',
+                    })), 'users.csv')}
+                  >
+                    Export Users
+                  </button>
+                </div>
+              </div>
 
-                            {/* Modal Header */}
-                            <div className="px-8 py-5 border-b border-[var(--color-ldust)] flex justify-between items-center bg-[var(--color-paper)]">
-                                <h3 className="font-display text-[var(--color-ink)] text-2xl flex items-center gap-4">
-                                    <span className="font-black text-[var(--color-rust)] font-mono">{selectedOrder.order_number}</span>
-                                    <span className={`px-3 py-1 text-[11px] uppercase tracking-wider font-bold text-white rounded-full ${statusColors[selectedOrder.status]}`}>{selectedOrder.status}</span>
-                                </h3>
-                                <button onClick={() => setSelectedOrder(null)} className="text-[var(--color-dust)] bg-white border border-[var(--color-ldust)] rounded-full p-2 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"><X size={20} /></button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="flex-1 overflow-y-auto p-8 space-y-10">
-
-                                {/* Timeline Action Bar */}
-                                <div>
-                                    <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-ink)] mb-4">Set Latest Status</h4>
-                                    <div className="flex flex-wrap gap-3">
-                                        {["placed", "reviewing", "confirmed", "dispatched", "delivered", "cancelled"].map(status => (
-                                            <button
-                                                key={status}
-                                                onClick={() => handleStatusChange(selectedOrder.id, status)}
-                                                className={`px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border transition-colors ${selectedOrder.status === status ? statusColors[status] + ' border-transparent text-white shadow-md' : 'bg-white text-[var(--color-dust)] border-[var(--color-ldust)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)]'}`}
-                                            >
-                                                {status}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    {/* Left Column: Buyer details */}
-                                    <div>
-                                        <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-ink)] mb-4 border-l-4 border-[var(--color-sage)] pl-3">Buyer & Delivery Profile</h4>
-                                        <div className="bg-[var(--color-paper)] border border-[var(--color-ldust)] p-6 rounded-2xl text-[15px] space-y-3">
-                                            <div className="flex items-center gap-3"><Users className="text-[var(--color-dust)]" size={18} /> <span className="font-bold">{selectedOrder.delivery_name}</span></div>
-                                            <div className="flex items-center gap-3"><MessageCircle className="text-[var(--color-dust)]" size={18} /> <span className="text-[var(--color-dust)]">{selectedOrder.delivery_phone}</span></div>
-                                            <p className="mt-4"><strong className="block text-xs uppercase text-[var(--color-dust)] mb-1">Shipping Address</strong> {selectedOrder.delivery_addr}</p>
-                                            <p><strong className="block text-xs uppercase text-[var(--color-dust)] mb-1">Locality/Pin</strong> {selectedOrder.delivery_area} - {selectedOrder.delivery_pin}</p>
-
-                                            {selectedOrder.buyer_notes && (
-                                                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                                                    <strong className="block text-xs uppercase text-amber-800 mb-1">Note from Buyer:</strong>
-                                                    <span className="text-amber-900 text-sm italic">"{selectedOrder.buyer_notes}"</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Right Column: Book Details */}
-                                    <div>
-                                        <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-ink)] mb-4 border-l-4 border-[var(--color-rust)] pl-3">Financial Allocation</h4>
-                                        <div className="bg-[var(--color-paper)] border border-[var(--color-ldust)] p-6 rounded-2xl space-y-4">
-                                            <p><strong className="block text-xs uppercase text-[var(--color-dust)] mb-1">Items Requested</strong> <span className="font-bold text-[15px]">{selectedOrder.book_title}</span></p>
-
-                                            <div className="mt-6 font-mono bg-white p-4 rounded-xl border border-[var(--color-ldust)] shadow-inner-sm">
-                                                <div className="flex justify-between mb-3 text-sm text-[var(--color-dust)]"><span>Current Market MSRP:</span> <span>₹{selectedOrder.mrp}</span></div>
-                                                <div className="flex justify-between mb-3 text-[15px] font-bold text-[var(--color-sage)]"><span>Net Price to Collect:</span> <span>₹{selectedOrder.price_paid}</span></div>
-                                                <div className="w-full h-[1px] bg-[var(--color-ldust)] my-3"></div>
-                                                <div className="flex justify-between text-xs text-[var(--color-dust)] italic"><span>Buyer's Total Savings:</span> <span>₹{selectedOrder.savings}</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Admin Data Tracking */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-[var(--color-ldust)] pt-8">
-                                    <div>
-                                        <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-ink)] mb-4">Internal Tracking (AWB)</h4>
-                                        <div className="flex gap-2">
-                                            <input type="text" value={trackingNo} onChange={e => setTrackingNo(e.target.value)} className="flex-1 border border-[var(--color-ldust)] px-4 py-3 text-sm rounded-xl focus:outline-none focus:border-[var(--color-rust)] shadow-inner-sm bg-white" placeholder="Enter tracking / reference number..." />
-                                            <button onClick={saveTracking} className="bg-[var(--color-ink)] text-white px-6 py-3 text-sm font-bold rounded-xl hover:bg-black transition-colors shadow-sm focus:outline-none flex items-center gap-2"><Check size={16} /> Save</button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--color-ink)] mb-4">Administrative Log</h4>
-                                        <div className="flex flex-col gap-3">
-                                            <textarea value={adminNotes} onChange={e => setAdminNotes(e.target.value)} className="w-full border border-[var(--color-ldust)] px-4 py-3 text-sm rounded-xl min-h-[100px] focus:outline-none focus:border-[var(--color-rust)] shadow-inner-sm bg-white" placeholder="Add private notes. Buyer will never see these." />
-                                            <button onClick={saveAdminNotes} className="bg-[var(--color-ink)] text-white px-6 py-3 text-sm font-bold rounded-xl self-end hover:bg-black transition-colors shadow-sm focus:outline-none flex items-center gap-2"><Check size={16} /> Save Notes</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div >
-                    </div >
-                )
-            }
-        </div >
-    );
+              <div className="bg-white rounded-2xl border border-[var(--color-ldust)] p-6 space-y-4">
+                <div className="font-display font-black text-xl text-[var(--color-ink)]">Maintenance</div>
+                <div className="flex flex-wrap gap-3">
+                  <button className="px-4 py-2 rounded-xl font-bold border border-[var(--color-ldust)]" onClick={() => clearCollection('cart')}>Clear cart</button>
+                  <button className="px-4 py-2 rounded-xl font-bold border border-[var(--color-ldust)]" onClick={() => clearCollection('wishlist')}>Clear wishlist</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
 }
 
 export default function AdminPage() {
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true)
+  const [loggedIn, setLoggedIn] = useState(false)
 
-    useEffect(() => {
-        const loggedIn = sessionStorage.getItem('ri_admin_logged_in');
-        if (loggedIn === 'true') {
-            setIsLoggedIn(true);
-        }
-        setLoading(false);
-    }, []);
+  useEffect(() => {
+    const v = sessionStorage.getItem('ri_admin_logged_in')
+    setLoggedIn(v === 'true')
+    setLoading(false)
+  }, [])
 
-    if (loading) return null;
+  if (loading) return null
 
-    return isLoggedIn ? (
-        <AdminDashboard onLogout={() => {
-            sessionStorage.removeItem('ri_admin_logged_in');
-            setIsLoggedIn(false);
-            toast.success("Logged out successfully");
-        }} />
-    ) : (
-        <AdminLogin onLogin={() => setIsLoggedIn(true)} />
-    );
+  if (!loggedIn) {
+    return <AdminLogin onLogin={() => setLoggedIn(true)} />
+  }
+
+  return (
+    <AdminDashboard onLogout={() => {
+      sessionStorage.removeItem('ri_admin_logged_in')
+      setLoggedIn(false)
+      toast.success('Logged out')
+    }} />
+  )
 }
+

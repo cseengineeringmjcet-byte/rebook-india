@@ -1,607 +1,552 @@
-"use client";
+'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import { motion, useInView, useMotionValue, useTransform, animate } from 'framer-motion';
-import { useDataStore } from '@/store/useDataStore';
-import { useWishlist } from '@/store/useWishlist';
-import { useCart } from '@/store/useCart';
-import { waBook, waVendor } from '@/lib/whatsapp';
-import BookCoverImage from '@/components/BookCoverImage';
-import RebookIndiaLogo from '@/components/Logo';
-import { Heart, CheckCircle2, MessageCircle, MapPin, Check } from 'lucide-react';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { Plus } from 'lucide-react'
+import { initializeApp, getApps, getApp } from 'firebase/app'
+import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore'
 
-// --- Animated Counter Hook ---
-function AnimatedCounter({ from = 0, to, duration = 2 }: { from?: number; to: number; duration?: number }) {
-  const count = useMotionValue(from);
-  const rounded = useTransform(count, (latest) => Math.round(latest));
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
+// ── Firebase config ──────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: 'AIzaSyDAwlYwWmuBEUxS9p-jxp_9KgVAE79fepI',
+  authDomain: 'rebookindia-29be8.firebaseapp.com',
+  projectId: 'rebookindia-29be8',
+  storageBucket: 'rebookindia-29be8.firebasestorage.app',
+  messagingSenderId: '1014316461662',
+  appId: '1:1014316461662:web:5c5b3037f031d50cabcecf',
+}
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
+const db = getFirestore(app)
 
-  useEffect(() => {
-    if (inView) {
-      animate(count, to, { duration, ease: "easeOut" });
-    }
-  }, [count, inView, to, duration]);
-
-  return <motion.span ref={ref}>{rounded}</motion.span>;
+// ── Category gradients & emojis ──────────────────────────────────────────────
+const GRADIENTS: Record<string, [string, string, string]> = {
+  engineering: ['#1a3a6e', '#2d6abf', '⚙️'],
+  medical: ['#0d5c3c', '#1a8f5e', '🏥'],
+  jee: ['#6b1a1a', '#c0392b', '⚡'],
+  neet: ['#4a0d6b', '#8e44ad', '🔬'],
+  upsc: ['#2c1a6e', '#6c3fb5', '🏛️'],
+  bank: ['#1a4a6e', '#2980b9', '🏦'],
+  science: ['#0d4a5c', '#16a085', '🧪'],
+  secondary: ['#4a3000', '#e67e22', '📖'],
+  school: ['#2d5c3e', '#4A7C59', '🎒'],
+  mba: ['#2c3e50', '#34495e', '💼'],
+  ca: ['#1a3a2c', '#2e7d5e', '📊'],
+  law: ['#3a1a0d', '#8B4513', '⚖️'],
+  selfhelp: ['#7d2d00', '#C94A2D', '💡'],
+  fiction: ['#1a1208', '#8B7355', '📝'],
+  regional: ['#4a1a6e', '#9b59b6', '🌸'],
+  default: ['#8B7355', '#C94A2D', '📚'],
 }
 
-export default function Home() {
-  const { books, vendors } = useDataStore();
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('All');
-  const [mrpInput, setMrpInput] = useState<number>(1000);
-  const [sellMrp, setSellMrp] = useState<number | ''>('');
-  const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
-  const { addItem: addCart, hasItem } = useCart();
+// ── AI category cover images (generated, served from /public/category-covers/)
+const AI_COVERS: Record<string, string> = {
+  engineering: '/category-covers/engineering.png',
+  medical: '/category-covers/medical.png',
+  jee: '/category-covers/jee.png',
+  neet: '/category-covers/neet.png',
+  upsc: '/category-covers/upsc.png',
+  bank: '/category-covers/bank.png',
+  science: '/category-covers/science.png',
+  secondary: '/category-covers/secondary.png',
+  school: '/category-covers/school.png',
+  mba: '/category-covers/mba.png',
+  ca: '/category-covers/ca.png',
+  law: '/category-covers/law.png',
+  selfhelp: '/category-covers/selfhelp.png',
+  fiction: '/category-covers/fiction.png',
+  regional: '/category-covers/regional.png',
+  default: '/category-covers/default.png',
+}
 
-  useEffect(() => {
-    const visited = localStorage.getItem('ri_visited');
-    if (visited || process.env.NODE_ENV === 'development') { // Skip loader in dev for speed, or if visited
-      // Wait, let's keep it for prod/dev if they specifically asked for 2 seconds.
-      // prompt: skip if localStorage has ri_visited
-    }
-    if (visited) {
-      setTimeout(() => setLoading(false), 0);
-    } else {
-      const timer = setTimeout(() => {
-        setLoading(false);
-        localStorage.setItem('ri_visited', 'true');
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+// ── Book Cover Component with 4-priority fallback ────────────────────────────
+function BookCover({ book, className }: { book: any; className?: string }) {
+  const catKey = book.category_id ?? book.category ?? 'default'
+  const [c1, c2, emoji] = GRADIENTS[catKey] ?? GRADIENTS.default
+  const aiCover = AI_COVERS[catKey] ?? AI_COVERS.default
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-[var(--color-ink)] flex flex-col items-center justify-center">
-        <RebookIndiaLogo variant="loader" darkBg />
-        <div className="mt-8 w-64 h-1.5 bg-white/10 rounded-full overflow-hidden relative">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: '100%' }}
-            transition={{ duration: 1.8, ease: "easeInOut" }}
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-[var(--color-rust)] to-[var(--color-amber)]"
-          />
-        </div>
-        <p className="mt-6 text-[var(--color-dust)] text-[10px] tracking-[3px] uppercase font-bold">
-          Every Book Deserves a Second Life
-        </p>
-      </div>
-    );
+  // Priority 1: Firebase Storage photo_url (student uploaded) — NEVER overridden
+  // Priority 2: Open Library ISBN cover
+  // Priority 3: AI-generated category image ← NEW
+  // Priority 4: Gradient with emoji (absolute last resort)
+
+  const buildUrls = () => {
+    const list: string[] = []
+    if (book.photo_url?.startsWith('https://firebasestorage.googleapis.com')) {
+      list.push(book.photo_url)
+    }
+    if (book.isbn) {
+      list.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`)
+      list.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`)
+    }
+    if (book.cover_url?.startsWith('http')) {
+      list.push(book.cover_url)
+    }
+    // Priority 3: AI category cover
+    list.push(aiCover)
+    return list
   }
 
-  // Derived Books
-  const tabs = ['All', '⚙️ Engineering', '🏥 Medical', '⚡ JEE', '🏛️ UPSC', '🎓 School', '💡 Self-Help', '📝 Fiction'];
-  const filteredBooks = activeTab === 'All' ? books : books.filter(b => {
-    if (activeTab.includes('Engineering')) return b.category === 'engineering';
-    if (activeTab.includes('Medical')) return b.category === 'medical';
-    if (activeTab.includes('JEE')) return b.category === 'jee';
-    if (activeTab.includes('UPSC')) return b.category === 'upsc';
-    if (activeTab.includes('School')) return b.category === 'school';
-    if (activeTab.includes('Self-Help')) return b.category === 'selfhelp';
-    if (activeTab.includes('Fiction')) return b.category === 'fiction';
-    return true;
-  });
+  const urls = buildUrls()
+  const [idx, setIdx] = useState(0)
+  const [failed, setFailed] = useState(false)
 
-  const featuredVendors = vendors.filter(v => v.isFeatured).slice(0, 6);
+  const advance = () => {
+    if (idx + 1 < urls.length) setIdx(idx + 1)
+    else setFailed(true)
+  }
 
-  // Stats Calc
-  const ourPrice = Math.round(mrpInput * 0.5);
-  const vEarns = Math.round(ourPrice * 0.8);
-  const rEarns = Math.round(ourPrice * 0.2);
-  const bSaves = mrpInput - ourPrice;
+  const onError = () => advance()
 
-  const heroBooks = [
-    books.find(b => b.id === 'b1'), books.find(b => b.id === 'b15'), books.find(b => b.id === 'b31'),
-    books.find(b => b.id === 'b22'), books.find(b => b.id === 'b11'), books.find(b => b.id === 'b2'),
-    books.find(b => b.id === 'b32'), books.find(b => b.id === 'b33'), books.find(b => b.id === 'b34'),
-  ].filter(Boolean) as typeof books;
+  // Open Library sends a 1×1 grey pixel image when a cover doesn't exist,
+  // instead of returning a 404. We detect this by checking naturalWidth on load.
+  const onLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    if (img.naturalWidth < 10 || img.naturalHeight < 10) {
+      advance()
+    }
+  }
+
+  // Priority 4: absolute final fallback — gradient card
+  if (failed) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: '100%', height: '100%',
+          background: `linear-gradient(135deg,${c1},${c2})`,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: 8, boxSizing: 'border-box',
+        }}
+      >
+        <span style={{ fontSize: 28, marginBottom: 6 }}>{emoji}</span>
+        <p style={{
+          color: 'rgba(255,255,255,0.95)', fontSize: 9,
+          fontWeight: 700, textAlign: 'center',
+          lineHeight: 1.3, margin: 0,
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 4,
+          WebkitBoxOrient: 'vertical',
+        }}>
+          {book.title}
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={urls[idx]}
+      alt={book.title}
+      className={className}
+      onError={onError}
+      onLoad={onLoad}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  )
+}
 
-      {/* HERO SECTION */}
-      <section className="min-h-screen bg-[var(--color-ink)] pt-16 grid grid-cols-1 lg:grid-cols-[55%_45%] relative overflow-hidden">
-        {/* Left Panel */}
-        <div className="px-6 lg:pl-16 xl:pl-24 py-12 lg:py-24 flex flex-col justify-center relative z-10">
-          <motion.div
-            initial="hidden" animate="visible"
-            variants={{
-              visible: { transition: { staggerChildren: 0.1, delayChildren: 0.2 } },
-              hidden: {}
-            }}
-          >
-            <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="mb-8">
-              <RebookIndiaLogo variant="hero" darkBg />
-            </motion.div>
 
-            <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="flex items-center gap-2 mb-6 text-white/90 text-sm font-bold bg-white/5 py-1.5 px-3 rounded-full w-fit">
-              <div className="w-2 h-2 rounded-full bg-[var(--color-amber)] animate-bdot" />
-              Live in Hyderabad — Shark Tank India Ready
-            </motion.div>
-
-            <motion.h2 variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="font-display italic text-[var(--color-amber)] opacity-50 text-xl lg:text-2xl mb-2">
-              &quot;पुस्तकें महंगी हों तो पढ़ाई क्यों रुके?&quot;
-            </motion.h2>
-
-            <motion.h1 variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="font-display font-black text-[var(--color-cream)] leading-[1.1] text-[clamp(28px,3.5vw,46px)] mb-6">
-              Why Should <span className="text-[var(--color-amber)]">Expensive Books</span> Stop Your Dreams?
-            </motion.h1>
-
-            <motion.p variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="text-[var(--color-ldust)] text-[15px] leading-relaxed max-w-xl mb-6">
-              Rebook India connects Hyderabad&apos;s students with 15 trusted second-hand book vendors. Real books. 50% off MRP. Always.
-            </motion.p>
-
-            <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="border-l-2 border-[var(--color-rust)] pl-3 py-1 text-[var(--color-dust)] text-sm mb-10">
-              మీ పుస్తకాలు అమ్మండి — మంచి ధర పొందండి
-            </motion.div>
-
-            <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="flex flex-col sm:flex-row gap-4 mb-12">
-              <Link href="/browse" className="bg-[var(--color-rust)] hover:bg-[#A93C23] text-white px-8 py-4 rounded-sm font-bold text-center transition-colors shadow-lg">
-                Browse Books in Hyderabad →
-              </Link>
-              <Link href="/sell" className="border border-[var(--color-cream)] hover:bg-[var(--color-cream)] hover:text-[var(--color-ink)] text-[var(--color-cream)] px-8 py-4 rounded-sm font-bold text-center transition-all bg-white/5 backdrop-blur-sm">
-                📱 Sell Your Books
-              </Link>
-            </motion.div>
-
-            <motion.div variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }} className="grid grid-cols-4 gap-4 border-t border-[var(--color-amber)]/10 pt-8">
-              <div className="flex flex-col"><span className="text-[var(--color-cream)] font-bold text-lg lg:text-xl">15</span><span className="text-[var(--color-dust)] text-xs font-bold uppercase tracking-wider">Trusted Vendors</span></div>
-              <div className="flex flex-col"><span className="text-[var(--color-cream)] font-bold text-lg lg:text-xl">14.2K+</span><span className="text-[var(--color-dust)] text-xs font-bold uppercase tracking-wider">Books</span></div>
-              <div className="flex flex-col"><span className="text-[var(--color-cream)] font-bold text-lg lg:text-xl">62K+</span><span className="text-[var(--color-dust)] text-xs font-bold uppercase tracking-wider">Families</span></div>
-              <div className="flex flex-col"><span className="text-[var(--color-cream)] font-bold text-lg lg:text-xl">₹48L+</span><span className="text-[var(--color-dust)] text-xs font-bold uppercase tracking-wider">Saved</span></div>
-            </motion.div>
-          </motion.div>
-        </div>
-
-        {/* Right Panel */}
-        <div className="hidden lg:flex bg-[var(--color-paper)] p-12 items-center justify-center relative overflow-hidden">
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, black 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-
-          <div className="grid grid-cols-3 gap-6 w-full max-w-[500px] relative z-10 perspective-[1000px]">
-            {heroBooks.slice(0, 9).map((b, i) => (
-              <Link href={`/book/${b.id}`} key={b.id || i} className="group relative transform transition-all duration-500 hover:-translate-y-2 hover:animate-none hover:rotate-0 hover:z-20 shadow-xl hover:shadow-2xl flex"
-                style={{ transform: `rotate(${(i % 2 === 0 ? 1 : -1) * (1.5 + ((i % 3) * 0.5))}deg)` }}>
-                <BookCoverImage book={b} className="w-full" />
-              </Link>
-            ))}
-          </div>
-
-          <div className="absolute top-8 right-8 bg-white p-3 shadow-2xl rounded-sm border border-[var(--color-ldust)] flex items-center gap-3 animate-float z-30 pointer-events-none max-w-[200px]">
-            <div className="text-2xl">📚</div>
-            <div className="text-xs leading-tight font-medium text-[var(--color-ink)]">
-              BS Grewal sold ₹475<br /><span className="text-[var(--color-dust)]">Kukatpally · 2 min ago</span>
-            </div>
-          </div>
-
-          <div className="absolute bottom-16 left-8 bg-white p-3 shadow-2xl rounded-sm border border-[var(--color-ldust)] flex items-center gap-3 animate-float z-30 pointer-events-none max-w-[200px]" style={{ animationDelay: '1.5s' }}>
-            <div className="text-2xl">🩺</div>
-            <div className="text-xs leading-tight font-medium text-[var(--color-ink)]">
-              Gray&apos;s Anatomy listed<br /><span className="text-[var(--color-dust)]">₹1,250 · Afzalgunj</span>
-            </div>
+// ── Loading Skeleton ─────────────────────────────────────────────────────────
+function Skeleton() {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))',
+      gap: 16,
+    }}>
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} style={{ borderRadius: 16, overflow: 'hidden', background: 'white' }}>
+          <div style={{
+            aspectRatio: '0.72', background: '#D4C5A9',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }} />
+          <div style={{ padding: '10px 12px 12px' }}>
+            <div style={{ height: 10, background: '#D4C5A9', borderRadius: 6, marginBottom: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <div style={{ height: 8, background: '#D4C5A9', borderRadius: 6, width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }} />
           </div>
         </div>
-      </section>
+      ))}
+    </div>
+  )
+}
 
-      {/* LIVE TICKER */}
-      <div className="bg-[var(--color-rust)] text-white py-2 overflow-hidden ticker-wrap relative">
-        <div className="flex whitespace-nowrap animate-ticker ticker-inner text-sm font-bold tracking-wider">
-          <span className="mx-4">◆ BS Grewal sold ₹475 Kukatpally</span>
-          <span className="mx-4">◆ Gray&apos;s Anatomy listed ₹1250 Afzalgunj</span>
-          <span className="mx-4">◆ Laxmikant order placed LB Nagar</span>
-          <span className="mx-4">◆ HC Verma Part 1+2 sold SR Nagar</span>
-          <span className="mx-4 text-[var(--color-gold)]">◆ 14200th book milestone 🏆</span>
-          <span className="mx-4">◆ Atomic Habits sold ₹300 Himayatnagar</span>
-          <span className="mx-4">◆ CLRS sold ₹925 Madhapur</span>
-          <span className="mx-4 text-white">◆ New buyer from Dilsukhnagar 🎉</span>
-          {/* Duplicate for seamless loop */}
-          <span className="mx-4">◆ BS Grewal sold ₹475 Kukatpally</span>
-          <span className="mx-4">◆ Gray&apos;s Anatomy listed ₹1250 Afzalgunj</span>
-          <span className="mx-4">◆ Laxmikant order placed LB Nagar</span>
-          <span className="mx-4">◆ HC Verma Part 1+2 sold SR Nagar</span>
-          <span className="mx-4 text-[var(--color-gold)]">◆ 14200th book milestone 🏆</span>
-          <span className="mx-4">◆ Atomic Habits sold ₹300 Himayatnagar</span>
-          <span className="mx-4">◆ CLRS sold ₹925 Madhapur</span>
-          <span className="mx-4 text-white">◆ New buyer from Dilsukhnagar 🎉</span>
+// ── Home FAQ Component ───────────────────────────────────────────────────────
+function HomeAccordion({ q, a }: { q: string, a: string }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <div style={{
+      border: '1px solid #D4C5A9', borderRadius: 8, marginBottom: 12,
+      background: 'white', overflow: 'hidden', transition: 'all 0.3s'
+    }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%', textAlign: 'left', padding: '20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: isOpen ? '#f8fafc' : 'white', border: 'none', cursor: 'pointer'
+        }}
+      >
+        <span style={{ fontWeight: 700, color: '#1A1208', fontSize: 16 }}>{q}</span>
+        <Plus
+          size={20}
+          style={{
+            flexShrink: 0, color: '#C94A2D',
+            transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
+            transition: 'transform 0.3s ease-in-out'
+          }}
+        />
+      </button>
+      <div style={{
+        maxHeight: isOpen ? 500 : 0, opacity: isOpen ? 1 : 0,
+        overflow: 'hidden', transition: 'all 0.3s ease-in-out'
+      }}>
+        <div style={{
+          padding: '0 20px 20px', color: '#8B7355', fontSize: 15,
+          lineHeight: 1.6, whiteSpace: 'pre-line', borderTop: isOpen ? '1px solid #D4C5A9' : 'none',
+          paddingTop: isOpen ? '20px' : 0
+        }}>
+          {a}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* PRICING CALCULATOR */}
-      <section id="calculator" className="py-20 bg-[var(--color-cream)] flex justify-center px-4">
-        <div className="max-w-4xl w-full bg-white p-8 md:p-12 shadow-xl border border-[var(--color-ldust)] rounded-[4px] relative">
-          <div className="text-center mb-10">
-            <h2 className="font-display font-black text-3xl md:text-4xl text-[var(--color-ink)] mb-4">Transparent Pricing Math</h2>
-            <p className="text-[var(--color-dust)] max-w-xl mx-auto italic font-display">&quot;We are transparent about what we earn. Trust matters more than money.&quot;</p>
-          </div>
+const HOME_FAQS = [
+  {
+    q: "How much discount do I get on books?",
+    a: "You get exactly 50% off the MRP on every single book. If a book costs Rs 1000 MRP you pay only Rs 500. No hidden charges. No delivery charges for pickup."
+  },
+  {
+    q: "How do I order a book?",
+    a: "Browse books on our website, click the book you want, click Add to Cart or Order via WhatsApp. We will contact you within 24 hours to confirm your order and arrange delivery or pickup."
+  },
+  {
+    q: "Can I get home delivery in Hyderabad?",
+    a: "Yes! We deliver across all areas of Hyderabad. You can also pick up directly from the vendor's shop to save time. Pickup is always free."
+  },
+  {
+    q: "How do I sell my old books on Rebook India?",
+    a: "Click Sell Your Books on the homepage, fill in the details of your book, upload a clear photo, and submit. Our admin team reviews within 24 hours and lists it. You earn 80% of the sale price when your book sells."
+  },
+  {
+    q: "How much money will I earn from selling?",
+    a: "You earn 80% of the sale price. We charge 20% commission. Example: If your book sells for Rs 500, you get Rs 400. The sale price is set at 50% of MRP so if MRP is Rs 1000, sale price is Rs 500 and you earn Rs 400."
+  },
+  {
+    q: "What is Rebook India?",
+    a: "Rebook India is Hyderabad's trusted marketplace for buying and selling second-hand books at 50% off MRP. We connect students who want to sell their old books with students who need affordable textbooks. We have 15 verified vendors across Hyderabad."
+  }
+];
 
-          <div className="mb-12">
-            <label className="block text-center font-bold text-[var(--color-ink)] mb-4 text-lg">Change Book MRP to See Magic:</label>
-            <input
-              type="range" min="100" max="5000" step="50"
-              value={mrpInput} onChange={(e) => setMrpInput(Number(e.target.value))}
-              className="w-full h-3 bg-[var(--color-ldust)] rounded-lg appearance-none cursor-pointer accent-[var(--color-rust)]"
-            />
-            <div className="text-center mt-4 font-mono text-xl font-bold text-[var(--color-dust)]">₹{mrpInput}</div>
-          </div>
+// ── Main Page ────────────────────────────────────────────────────────────────
+export default function HomePage() {
+  const [books, setBooks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState('all')
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div className="bg-[var(--color-paper)] p-4 rounded-sm border-t-4 border-[var(--color-rust)] text-center">
-              <div className="text-xs uppercase text-[var(--color-dust)] font-bold mb-1 line-through">MRP</div>
-              <div className="text-xl font-mono text-[var(--color-ink)] opacity-50 line-through">₹{mrpInput}</div>
-            </div>
-            <div className="bg-[var(--color-paper)] p-4 rounded-sm border-t-4 border-[var(--color-ink)] text-center shadow-md transform -translate-y-1">
-              <div className="text-xs uppercase text-[var(--color-ink)] font-bold mb-1">Our Price (50%)</div>
-              <div className="text-2xl font-mono text-[var(--color-ink)] font-bold">₹{ourPrice}</div>
-            </div>
-            <div className="bg-[var(--color-paper)] p-4 rounded-sm border-t-4 border-[var(--color-sage)] text-center">
-              <div className="text-xs uppercase text-[var(--color-sage)] font-bold mb-1">Vendor (80%)</div>
-              <div className="text-xl font-mono text-[var(--color-sage)] font-bold">₹{vEarns}</div>
-            </div>
-            <div className="bg-[var(--color-paper)] p-4 rounded-sm border-t-4 border-[var(--color-ink)] text-center">
-              <div className="text-xs uppercase text-[var(--color-ink)] font-bold mb-1 opacity-70">Rebook (20%)</div>
-              <div className="text-xl font-mono text-[var(--color-ink)] font-bold">₹{rEarns}</div>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-[var(--color-gold)] to-[var(--color-amber)] p-6 rounded-sm text-center shadow-lg transform -translate-y-2 mt-6 border border-white/20">
-            <div className="text-sm uppercase text-[var(--color-ink)] font-black tracking-widest mb-1">Your Total Savings</div>
-            <div className="text-4xl md:text-5xl font-mono text-[var(--color-ink)] font-black">₹{bSaves}</div>
-          </div>
+  const fetchBooks = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'books'), where('is_available', '==', true))
+      )
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      setBooks(data)
+    } catch (err: any) {
+      console.error('Firebase fetch error:', err)
+      setError(err.message || 'Failed to load books')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchBooks() }, [])
+
+  // Unique categories from loaded books
+  const categories = ['all', ...Array.from(new Set(books.map((b: any) => b.category_id).filter(Boolean)))]
+
+  const filtered = activeTab === 'all'
+    ? books
+    : books.filter((b: any) => b.category_id === activeTab)
+
+  const categoryLabel = (slug: string) => {
+    if (slug === 'all') return 'All Books'
+    return books.find((b: any) => b.category_id === slug)?.category_name || slug
+  }
+
+  return (
+    <main style={{ minHeight: '100vh', background: '#FAF6EC' }}>
+
+      {/* HERO */}
+      <section style={{ background: '#1A1208', padding: '60px 24px', textAlign: 'center' }}>
+        <p style={{
+          color: '#E8A020', fontSize: 13,
+          fontFamily: 'DM Sans, sans-serif',
+          letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          Hyderabad's Trusted Second-Hand Book Marketplace
+        </p>
+        <h1 style={{
+          fontFamily: 'Playfair Display, serif',
+          fontSize: 'clamp(28px, 5vw, 52px)',
+          fontWeight: 900, color: '#F5EFE0',
+          lineHeight: 1.2, maxWidth: 700, margin: '0 auto 16px',
+        }}>
+          Why Should{' '}
+          <span style={{ color: '#E8A020' }}>Expensive Books</span>
+          {' '}Stop Your Dreams?
+        </h1>
+        <p style={{
+          color: '#D4C5A9', fontSize: 16,
+          fontFamily: 'DM Sans, sans-serif',
+          maxWidth: 500, margin: '0 auto 32px', lineHeight: 1.6,
+        }}>
+          Get 50% off MRP on every book. 15 trusted vendors. 35+ books available in Hyderabad.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link href="/browse" style={{
+            background: '#C94A2D', color: 'white',
+            padding: '14px 28px', borderRadius: 12,
+            textDecoration: 'none', fontFamily: 'DM Sans, sans-serif',
+            fontWeight: 600, fontSize: 15,
+          }}>
+            Browse Books in Hyderabad
+          </Link>
+          <Link href="/sell" style={{
+            background: 'transparent', color: '#F5EFE0',
+            padding: '14px 28px', borderRadius: 12,
+            textDecoration: 'none', fontFamily: 'DM Sans, sans-serif',
+            fontWeight: 600, fontSize: 15,
+            border: '1px solid #F5EFE0',
+          }}>
+            Sell Your Books
+          </Link>
         </div>
       </section>
 
       {/* BOOKS SECTION */}
-      <section className="py-20 bg-[var(--color-paper)]">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="font-display font-black text-3xl md:text-4xl text-[var(--color-ink)]">Recently Added Books</h2>
-            <Link href="/browse" className="text-[var(--color-rust)] font-bold hover:underline hidden md:block">View All Books →</Link>
-          </div>
+      <section style={{ padding: '48px 24px', maxWidth: 1200, margin: '0 auto' }}>
+        <h2 style={{
+          fontFamily: 'Playfair Display, serif',
+          fontSize: 32, fontWeight: 700, color: '#1A1208',
+          textAlign: 'center', marginBottom: 8,
+        }}>
+          Available Books
+        </h2>
+        <p style={{
+          color: '#8B7355', textAlign: 'center',
+          marginBottom: 32, fontFamily: 'DM Sans, sans-serif',
+        }}>
+          {loading ? 'Loading books...' : `${books.length} books at 50% off MRP across Hyderabad`}
+        </p>
 
-          <div className="flex overflow-x-auto hide-scrollbar gap-2 mb-10 pb-2">
-            {tabs.map(tab => (
+        {/* CATEGORY TABS */}
+        {!loading && books.length > 0 && (
+          <div style={{
+            display: 'flex', gap: 8, flexWrap: 'wrap',
+            justifyContent: 'center', marginBottom: 32,
+          }}>
+            {categories.map(cat => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap px-6 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${activeTab === tab
-                  ? 'bg-[var(--color-rust)] text-white shadow-md'
-                  : 'bg-[var(--color-cream)] text-[var(--color-dust)] hover:bg-white border border-[var(--color-ldust)]'
-                  }`}
+                key={cat}
+                onClick={() => setActiveTab(cat)}
+                style={{
+                  padding: '8px 18px', borderRadius: 24, border: 'none',
+                  cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13, fontWeight: 600,
+                  background: activeTab === cat ? '#C94A2D' : '#F5EFE0',
+                  color: activeTab === cat ? 'white' : '#1A1208',
+                  transition: 'all 0.2s',
+                }}
               >
-                {tab}
+                {categoryLabel(cat)}
               </button>
             ))}
           </div>
+        )}
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-            {filteredBooks.slice(0, 10).map(book => (
-              <div key={book.id} className="bg-white group rounded-sm shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col hover:-translate-y-1">
-                <div className="relative">
-                  <Link href={`/book/${book.id}`} className="block">
-                    <BookCoverImage book={book} />
-                  </Link>
-                  <div className="absolute top-2 right-2 bg-[var(--color-rust)] text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow-sm">
-                    50% OFF
-                  </div>
-                  <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-3 pt-8">
-                    <span className="text-white text-[10px] font-bold uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded-sm backdrop-blur-sm">
-                      {book.condition.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <button
-                    onClick={(e) => { e.preventDefault(); toggleWishlist(book.id); toast.success(hasWishlist(book.id) ? "Removed from wishlist" : "Added to wishlist"); }}
-                    className={`absolute top-2 left-2 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-sm transition-colors ${hasWishlist(book.id) ? 'text-red-500' : 'text-[var(--color-dust)] hover:text-red-500'}`}
-                  >
-                    <Heart size={16} fill={hasWishlist(book.id) ? "currentColor" : "none"} />
-                  </button>
-                </div>
-                <div className="p-4 flex-1 flex flex-col">
-                  <Link href={`/book/${book.id}`} className="hover:text-[var(--color-rust)]">
-                    <h3 className="font-display font-bold text-sm text-[var(--color-ink)] line-clamp-2 leading-snug mb-1 hover:text-[var(--color-rust)]">
-                      {book.title}
-                    </h3>
-                  </Link>
-                  <p className="text-[10px] text-[var(--color-dust)] uppercase mb-3 flex-1">{book.author}</p>
+        {/* LOADING */}
+        {loading && <Skeleton />}
 
-                  <div className="mb-3">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-lg font-bold text-[var(--color-sage)]">₹{book.ourPrice}</span>
-                      <span className="font-mono text-xs line-through text-[var(--color-dust)]">₹{book.mrp}</span>
-                    </div>
-                    <div className="text-[11px] font-bold text-[var(--color-rust)] bg-[var(--color-rust)]/10 inline-block px-1.5 py-0.5 rounded-sm mt-1">
-                      Save ₹{book.savings}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-[9px] text-[var(--color-dust)] mb-4">
-                    <MapPin size={10} />
-                    <span className="truncate">{book.vendorName}, {book.area}</span>
-                  </div>
-
-                  <div className="flex gap-2 mt-auto">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (!hasItem(book.id)) {
-                          addCart(book);
-                          toast.success(`Added to cart: ${book.title}`);
-                        }
-                      }}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-bold rounded-sm transition-colors ${hasItem(book.id) ? 'bg-[var(--color-sage)] text-white' : 'bg-[var(--color-ink)] hover:bg-[var(--color-rust)] text-white'}`}
-                    >
-                      {hasItem(book.id) ? <><Check size={14} /> In Cart</> : 'Add to Cart'}
-                    </button>
-                    <a
-                      href={waBook(book)}
-                      target="_blank" rel="noopener noreferrer"
-                      className="w-8 flex items-center justify-center bg-[#25D366]/10 text-[#25D366] rounded-sm hover:bg-[#25D366] hover:text-white transition-colors"
-                    >
-                      <MessageCircle size={16} />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* ERROR */}
+        {error && !loading && (
+          <div style={{
+            background: '#fee2e2', border: '1px solid #fca5a5',
+            borderRadius: 16, padding: 32, textAlign: 'center',
+          }}>
+            <p style={{ color: '#991b1b', fontFamily: 'DM Sans, sans-serif', fontSize: 16, marginBottom: 16 }}>
+              ❌ Failed to load books: {error}
+            </p>
+            <button
+              onClick={fetchBooks}
+              style={{
+                background: '#C94A2D', color: 'white', border: 'none',
+                padding: '12px 24px', borderRadius: 10,
+                cursor: 'pointer', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
+              }}
+            >
+              Try Again
+            </button>
           </div>
+        )}
 
-          {filteredBooks.length > 10 && (
-            <div className="text-center mt-12 block md:hidden">
-              <Link href={`/browse`} className="border border-[var(--color-ink)] text-[var(--color-ink)] px-6 py-3 font-bold rounded-sm inline-block">
-                View All Books →
+        {/* EMPTY */}
+        {!loading && !error && filtered.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <p style={{ fontSize: 48, marginBottom: 16 }}>📚</p>
+            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#1A1208', marginBottom: 8 }}>
+              No books yet
+            </p>
+            <p style={{ color: '#8B7355', fontFamily: 'DM Sans, sans-serif', marginBottom: 24 }}>
+              {activeTab === 'all'
+                ? 'Firebase has no books yet. Run the seed page.'
+                : `No ${activeTab} books available right now.`}
+            </p>
+            {activeTab === 'all' && (
+              <Link href="/seed" style={{
+                background: '#C94A2D', color: 'white',
+                padding: '12px 24px', borderRadius: 10,
+                textDecoration: 'none', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
+              }}>
+                Go to Seed Page →
               </Link>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* HOW IT WORKS */}
-      <section className="py-20 bg-[var(--color-cream)] border-t border-[var(--color-ldust)]">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display font-black text-3xl md:text-4xl text-[var(--color-ink)] mb-4">How Rebook Works</h2>
-            <p className="text-[var(--color-dust)]">No payment gateways. Direct interaction. Trust-based system.</p>
+            )}
           </div>
+        )}
 
-          <div className="relative">
-            <div className="hidden md:block absolute top-[45px] left-[10%] right-[10%] h-[2px] bg-gradient-to-r from-[var(--color-ldust)] via-[var(--color-amber)] to-[var(--color-ldust)] z-0" />
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              {[
-                { n: 1, t: "Browse & Find", d: "Search 35+ verified books at exactly 50% discount", icon: "🔍" },
-                { n: 2, t: "Place Request", d: "Add to cart and submit order with no payment", icon: "🛒" },
-                { n: 3, t: "Admin Confirms", d: "We confirm stock via WhatsApp in 24 hrs", icon: "💬" },
-                { n: 4, t: "Book Delivered", d: "Pay directly to vendor upon collection", icon: "🤝" }
-              ].map(step => (
-                <div key={step.n} className="relative z-10 flex flex-col items-center text-center">
-                  <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-[var(--color-cream)] mb-6 text-3xl">
-                    {step.icon}
-                  </div>
-                  <div className="text-[var(--color-rust)] font-bold mb-2 uppercase tracking-wider text-xs">Step {step.n}</div>
-                  <h3 className="font-display font-bold text-lg text-[var(--color-ink)] mb-2">{step.t}</h3>
-                  <p className="text-[var(--color-dust)] text-sm px-4">{step.d}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* IMPACT SECTION */}
-      <section className="py-20 bg-[var(--color-ink)] text-white">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display font-black text-3xl md:text-4xl text-[var(--color-cream)] mb-4">Our Impact in Hyderabad</h2>
-            <div className="w-16 h-1 bg-[var(--color-rust)] mx-auto" />
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-12 gap-x-6 text-center">
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-amber)] font-bold mb-2">
-                <AnimatedCounter to={62000} />+
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Families Helped</div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-amber)] font-bold mb-2">
-                <AnimatedCounter to={14200} />+
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Books Available</div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-amber)] font-bold mb-2">
-                ₹<AnimatedCounter to={48} />L+
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Total Savings</div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-amber)] font-bold mb-2">
-                <AnimatedCounter to={15} />
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Trusted Vendors</div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-amber)] font-bold mb-2">
-                <AnimatedCounter to={50} />%
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Average Savings</div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl md:text-5xl font-mono text-[var(--color-sage)] font-bold mb-2">
-                ₹<AnimatedCounter to={0} />
-              </div>
-              <div className="text-[var(--color-ldust)] uppercase tracking-wider text-xs font-bold">Paid Advertising</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* VENDORS SECTION */}
-      <section className="py-20 bg-[var(--color-paper)]">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display font-black text-3xl md:text-4xl text-[var(--color-ink)] mb-4">Our Local Heroes</h2>
-            <p className="text-[var(--color-dust)] max-w-2xl mx-auto">15 trusted vendors across Hyderabad supporting affordable education.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            {featuredVendors.map(v => (
-              <Link href={`/vendor/${v.id}`} key={v.id} className="bg-white rounded-sm overflow-hidden shadow-md group hover:-translate-y-1 transition-transform block">
-                <div className="h-[140px] relative overflow-hidden">
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors z-10" />
-                  <img src={v.shopImage} alt={v.shopName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-sm uppercase flex items-center gap-1 border border-white/20">
-                    {v.badge === 'Elite' && '🏆 '} {v.badge}
-                  </div>
-                  <div className="absolute top-3 right-3 z-20 bg-white text-[var(--color-ink)] text-xs font-bold px-2 py-1 rounded-sm flex items-center gap-1 shadow-md">
-                    ⭐ {v.rating}
-                  </div>
-                </div>
-                <div className="p-5">
-                  <h3 className="font-display font-bold text-lg text-[var(--color-ink)] mb-1">{v.shopName}</h3>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-[var(--color-rust)] mb-3">{v.speciality}</div>
-
-                  <div className="flex items-center justify-between text-sm text-[var(--color-dust)] mb-5">
-                    <span className="flex items-center gap-1"><MapPin size={14} /> {v.area}</span>
-                    <span className="font-mono">{v.totalBooks} Books</span>
-                  </div>
-
-                  <button
-                    onClick={(e) => { e.preventDefault(); window.open(waVendor(v), '_blank'); }}
-                    className="w-full bg-[#25D366]/10 text-[#128c7e] hover:bg-[#25D366] hover:text-white py-2 rounded-sm font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+        {/* BOOKS GRID */}
+        {!loading && !error && filtered.length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))',
+            gap: 16,
+          }}>
+            {filtered.map((book: any) => {
+              const ourPrice = book.our_price ?? Math.round(Number(book.mrp || 0) * 0.5)
+              const savings = book.savings ?? Math.round(Number(book.mrp || 0) * 0.5)
+              return (
+                <Link
+                  key={book.id}
+                  href={`/book/${book.id}`}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  <div
+                    style={{
+                      background: 'white', borderRadius: 16,
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 8px rgba(26,18,8,0.08)',
+                      transition: 'all 0.3s', cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'
+                        ; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(26,18,8,0.15)'
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
+                        ; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(26,18,8,0.08)'
+                    }}
                   >
-                    <MessageCircle size={16} /> WhatsApp Vendor
-                  </button>
-                </div>
-              </Link>
-            ))}
-          </div>
+                    {/* COVER */}
+                    <div style={{
+                      width: '100%', aspectRatio: '0.72',
+                      overflow: 'hidden', background: '#D4C5A9',
+                    }}>
+                      <BookCover book={book} />
+                    </div>
 
-          <div className="text-center">
-            <Link href="/vendors" className="bg-white border border-[var(--color-ldust)] text-[var(--color-ink)] px-8 py-3 font-bold rounded-sm inline-block hover:border-[var(--color-ink)] transition-colors shadow-sm">
-              See all 15 vendors →
-            </Link>
+                    {/* INFO */}
+                    <div style={{ padding: '10px 12px 12px' }}>
+                      <p style={{
+                        fontFamily: 'Playfair Display, serif',
+                        fontSize: 12, fontWeight: 700, color: '#1A1208',
+                        lineHeight: 1.3, marginBottom: 2,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}>
+                        {book.title}
+                      </p>
+                      <p style={{
+                        fontSize: 10, color: '#8B7355',
+                        fontFamily: 'DM Sans, sans-serif', marginBottom: 6,
+                      }}>
+                        {book.author}
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span style={{
+                          fontFamily: 'Space Mono, monospace',
+                          fontSize: 14, fontWeight: 700, color: '#4A7C59',
+                        }}>
+                          ₹{ourPrice}
+                        </span>
+                        <span style={{ fontSize: 10, color: '#8B7355', textDecoration: 'line-through' }}>
+                          ₹{book.mrp}
+                        </span>
+                      </div>
+                      <p style={{
+                        fontSize: 10, color: '#C94A2D',
+                        fontFamily: 'DM Sans, sans-serif', fontWeight: 600,
+                      }}>
+                        Save ₹{savings} • 50% OFF
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
           </div>
-        </div>
+        )}
       </section>
 
-      {/* TESTIMONIALS */}
-      <section className="py-20 bg-[var(--color-ink)] text-white">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-white/5 p-8 rounded-sm border border-white/10 backdrop-blur-sm relative">
-              <div className="text-[var(--color-amber)] text-xl mb-4">★★★★★</div>
-              <p className="font-display italic text-[var(--color-ldust)] mb-6 text-lg leading-relaxed">
-                &quot;My son needed 6 MBBS books. New price ₹14,000. Rebook India ₹7,000. We saved ₹7,000 in one order.&quot;
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[var(--color-rust)] flex items-center justify-center font-bold">AR</div>
-                <div>
-                  <div className="font-bold text-sm">Asha Reddy</div>
-                  <div className="text-xs text-white/50">Dilsukhnagar</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[var(--color-amber)]/10 p-8 rounded-sm border border-[var(--color-amber)]/30 backdrop-blur-sm relative transform md:-translate-y-4 shadow-xl shadow-black/50">
-              <div className="text-[var(--color-amber)] text-xl mb-4">★★★★★</div>
-              <p className="font-display italic text-[#ffe5b4] mb-6 text-lg leading-relaxed">
-                &quot;BS Grewal, Galvin OS, CLRS — all 3 for ₹1,900 instead of ₹4,200. Honest platform.&quot;
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[var(--color-amber)] text-[var(--color-ink)] flex items-center justify-center font-bold">KR</div>
-                <div>
-                  <div className="font-bold text-sm">Karthik Rao</div>
-                  <div className="text-xs text-white/50">JNTU Kukatpally</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/5 p-8 rounded-sm border border-white/10 backdrop-blur-sm relative">
-              <div className="text-[var(--color-amber)] text-xl mb-4">★★★★★</div>
-              <p className="font-display italic text-[var(--color-ldust)] mb-6 text-lg leading-relaxed">
-                &quot;UPSC prep Laxmikant Bipin Chandra GC Leong all half price. Every rupee counts.&quot;
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[var(--color-sage)] flex items-center justify-center font-bold">RN</div>
-                <div>
-                  <div className="font-bold text-sm">Ramesh Naidu</div>
-                  <div className="text-xs text-white/50">LB Nagar</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SELL SECTION */}
-      <section className="py-20 bg-[var(--color-cream)]">
-        <div className="max-w-5xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+      {/* FAQ HOMEPAGE SECTION */}
+      <section style={{ padding: '64px 24px', background: 'white' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: 'Playfair Display, serif',
+            fontSize: 32, fontWeight: 700, color: '#1A1208',
+            textAlign: 'center', marginBottom: 40,
+          }}>
+            Frequently Asked Questions
+          </h2>
           <div>
-            <h2 className="font-display font-black text-3xl md:text-5xl text-[var(--color-ink)] mb-6 leading-tight">
-              Got old books? <br />Turn them into <span className="text-[var(--color-sage)] border-b-4 border-[var(--color-sage)]">cash</span>.
-            </h2>
-
-            <div className="bg-white p-6 rounded-sm shadow-md border border-[var(--color-ldust)] mb-8">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-2">Check what you&apos;ll earn:</label>
-              <div className="flex items-center gap-4">
-                <div className="relative w-1/2">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 font-mono text-[var(--color-dust)]">₹</span>
-                  <input
-                    type="number" min="100" placeholder="Book MRP"
-                    value={sellMrp} onChange={e => setSellMrp(Number(e.target.value))}
-                    className="w-full pl-8 pr-4 py-3 bg-[var(--color-paper)] border border-[var(--color-ldust)] rounded-sm font-mono focus:outline-none focus:border-[var(--color-rust)]"
-                  />
-                </div>
-                <div className="text-xl md:text-2xl font-mono font-bold text-[var(--color-sage)]">
-                  → Earn ₹{sellMrp ? Math.round((sellMrp as number * 0.5) * 0.8) : '0'}
-                </div>
-              </div>
-            </div>
-
-            <ul className="space-y-4 mb-8">
-              {['Highest returns in market (80% of listing price)', 'Free pickup from your college or home', 'Trusted by 15,000+ students', 'Zero listing fee'].map((text, i) => (
-                <li key={i} className="flex items-start gap-3 text-[var(--color-ink)] font-medium">
-                  <CheckCircle2 className="text-[var(--color-sage)] shrink-0 mt-0.5" size={20} />
-                  {text}
-                </li>
-              ))}
-            </ul>
-
-            <Link href="/sell" className="bg-[var(--color-ink)] hover:bg-[var(--color-rust)] text-[var(--color-cream)] px-8 py-4 rounded-sm font-bold shadow-lg transition-colors inline-block text-lg">
-              Sell My Book Now
-            </Link>
+            {HOME_FAQS.map((faq, i) => (
+              <HomeAccordion key={i} q={faq.q} a={faq.a} />
+            ))}
           </div>
-
-          <div className="bg-[var(--color-ink)] p-8 md:p-10 rounded-sm shadow-2xl relative overflow-hidden text-white transform md:rotate-2">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--color-rust)] rounded-full blur-3xl opacity-20" />
-
-            <h3 className="font-display font-black text-2xl text-[var(--color-cream)] mb-8">How the money flows:</h3>
-
-            <div className="space-y-6 relative z-10">
-              <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                <span className="text-[var(--color-ldust)] text-sm">Original MRP</span>
-                <span className="font-mono text-xl line-through opacity-50">₹1000</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                <span className="text-white font-bold">Listed on Rebook</span>
-                <span className="font-mono text-xl">₹500</span>
-              </div>
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-[var(--color-amber)] font-bold text-lg">You Earn (80%)</span>
-                <span className="font-mono text-3xl font-black text-[var(--color-sage)] bg-white/10 px-3 py-1 rounded-sm">₹400</span>
-              </div>
-              <div className="flex justify-between items-center mt-2 opacity-50">
-                <span className="text-sm">Rebook Earns (20%)</span>
-                <span className="font-mono">₹100</span>
-              </div>
-            </div>
-
-            <p className="mt-8 text-xs text-white/40 italic">* Calculations based on standard complete condition books.</p>
+          <div style={{ textAlign: 'center', marginTop: 32 }}>
+            <Link href="/faq" style={{
+              display: 'inline-block',
+              background: 'transparent', color: '#1A1208',
+              padding: '12px 28px', borderRadius: 8,
+              textDecoration: 'none', fontFamily: 'DM Sans, sans-serif',
+              fontWeight: 700, fontSize: 15,
+              border: '2px solid #1A1208',
+              transition: 'all 0.2s'
+            }}>
+              View All FAQs
+            </Link>
           </div>
         </div>
       </section>
 
-    </div>
-  );
+      {/* FOOTER */}
+      <footer style={{ background: '#1A1208', padding: '40px 24px', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5EFE0', marginBottom: 8 }}>
+          Rebook<span style={{ color: '#C94A2D' }}>India</span>
+        </p>
+        <p style={{ color: '#8B7355', fontSize: 12, fontFamily: 'DM Sans, sans-serif' }}>
+          © 2025 Rebook India • Hyderabad's Trusted Second-Hand Book Marketplace
+        </p>
+      </footer>
+
+    </main>
+  )
 }

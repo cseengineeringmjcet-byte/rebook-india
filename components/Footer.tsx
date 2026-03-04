@@ -37,6 +37,7 @@ export default function Footer() {
                         <li><Link href="/orders" className="hover:text-[var(--color-amber)] transition-colors">Track Order</Link></li>
                         <li><Link href="/auth" className="hover:text-[var(--color-amber)] transition-colors">Login / Register</Link></li>
                         <li><Link href="/admin" className="hover:text-[var(--color-amber)] transition-colors">Admin Dashboard</Link></li>
+                        <li><Link href="/faq" className="hover:text-[var(--color-amber)] transition-colors">FAQs</Link></li>
                     </ul>
                 </div>
 

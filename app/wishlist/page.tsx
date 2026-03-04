@@ -47,7 +47,7 @@ export default function WishlistPage() {
                     {wishlistBooks.map(book => (
                         <div key={book.id} className="bg-white group rounded-sm shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col hover:-translate-y-1">
                             <Link href={`/book/${book.id}`} className="block relative">
-                                <BookCoverImage book={book} />
+                                <BookCoverImage isbn={book.isbn || ''} title={book.title} category={book.category || (book as any).category_id} coverUrl={(book as any).cover_url || (book as any).coverUrl} />
                                 <div className="absolute top-2 right-2 bg-[var(--color-rust)] text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow-sm">
                                     50% OFF
                                 </div>

@@ -12,17 +12,20 @@ import { waBook, waVendor } from '@/lib/whatsapp';
 import { useAuth } from '@/store/useAuth';
 import { toast } from 'sonner';
 import { ShoppingCart, Heart, MessageCircle, Star, MapPin, Package, Check, ChevronRight, ChevronDown } from 'lucide-react';
+import { db } from '@/lib/firebase/config';
+import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 
 export default function BookDetail({ params }: { params: Promise<{ id: string }> }) {
-    const { books, vendors } = useDataStore();
+    const { books, vendors, isLoaded } = useDataStore();
     const { id } = React.use(params);
     const book = books.find(b => b.id === id);
     const { addItem, hasItem } = useCart();
     const { toggle: toggleWishlist, has: hasWishlist } = useWishlist();
-    const { isLoggedIn } = useAuth();
+    const { isLoggedIn, user } = useAuth();
     const router = useRouter();
     const [accordionOpen, setAccordionOpen] = useState(false);
 
+    if (!isLoaded) return <div className="min-h-[50vh] flex items-center justify-center">Loading book details...</div>;
     if (!book) return notFound();
 
     const vendor = vendors.find(v => v.id === book.vendorId);
@@ -36,7 +39,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--color-dust)] mb-8">
                     <Link href="/" className="hover:text-[var(--color-rust)]">Home</Link>
                     <ChevronRight size={12} />
-                    <Link href={`/browse?cat=${book.category}`} className="hover:text-[var(--color-rust)]">{book.category.replace('_', ' ')}</Link>
+                    <Link href={`/browse?cat=${book.category}`} className="hover:text-[var(--color-rust)]">{book.category?.replace('_', ' ')}</Link>
                     <ChevronRight size={12} />
                     <span className="text-[var(--color-ink)] truncate max-w-[200px] inline-block">{book.title}</span>
                 </div>
@@ -46,7 +49,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                     {/* Left: Image */}
                     <div className="md:col-span-4 lg:col-span-3">
                         <div className="sticky top-24">
-                            <BookCoverImage book={book} className="w-full max-w-[300px] mx-auto md:max-w-full shadow-2xl rounded-sm group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.2)]" />
+                            <BookCoverImage isbn={book.isbn || ''} title={book.title} category={book.category || (book as any).category_id} coverUrl={(book as any).cover_url || (book as any).coverUrl} className="w-full max-w-[300px] mx-auto md:max-w-full shadow-2xl rounded-sm group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.2)]" />
                             <div className="mt-4 flex gap-2 justify-center hidden md:flex">
                                 <button
                                     onClick={() => { toggleWishlist(book.id); toast.success("Wishlist updated"); }}
@@ -63,7 +66,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                     <div className="md:col-span-8 lg:col-span-6 space-y-6">
                         <div>
                             <span className="inline-block bg-[var(--color-ink)] text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm mb-3">
-                                Condition: {book.condition.replace('_', ' ')}
+                                Condition: {book.condition?.replace('_', ' ')}
                             </span>
                             <h1 className="font-display font-black text-3xl md:text-5xl text-[var(--color-ink)] leading-tight mb-2">
                                 {book.title}
@@ -113,24 +116,64 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                         {/* Buttons */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
                             <button
-                                onClick={() => {
-                                    addItem(book);
-                                    if (!isLoggedIn) {
+                                onClick={async () => {
+                                    if (!isLoggedIn || !user) {
                                         toast.error("Please login to continue");
                                         router.push('/auth');
                                         return;
                                     }
-                                    router.push('/checkout');
+                                    try {
+                                        toast.loading("Preparing checkout...");
+
+                                        // Ensure it isn't completely duplicated 
+                                        const snap = await getDocs(query(collection(db, "cart"), where("user_id", "==", user.uid), where("book_id", "==", book.id)));
+                                        if (snap.empty) {
+                                            await addDoc(collection(db, "cart"), {
+                                                book_id: book.id,
+                                                user_id: user.uid,
+                                                added_at: serverTimestamp()
+                                            });
+                                        }
+
+                                        toast.dismiss();
+                                        router.push('/checkout');
+                                    } catch (err) {
+                                        toast.dismiss();
+                                        toast.error("Failed to process cart.");
+                                    }
                                 }}
                                 className="flex items-center justify-center bg-[var(--color-rust)] text-white hover:bg-[#A93C23] py-4 rounded-sm font-bold shadow-md transition-colors text-lg w-full"
                             >
                                 Place Order Request
                             </button>
                             <button
-                                onClick={() => {
+                                onClick={async () => {
+                                    if (!isLoggedIn || !user) {
+                                        toast.error("Please login to add to cart");
+                                        router.push('/auth');
+                                        return;
+                                    }
                                     if (!hasItem(book.id)) {
-                                        addItem(book);
-                                        toast.success("Added to cart");
+                                        try {
+                                            toast.loading("Adding...");
+
+                                            // Ensure it isn't completely duplicated 
+                                            const snap = await getDocs(query(collection(db, "cart"), where("user_id", "==", user.uid), where("book_id", "==", book.id)));
+                                            if (snap.empty) {
+                                                await addDoc(collection(db, "cart"), {
+                                                    book_id: book.id,
+                                                    user_id: user.uid,
+                                                    added_at: serverTimestamp()
+                                                });
+                                                addItem(book); // Update local UI instantly
+                                            }
+
+                                            toast.dismiss();
+                                            toast.success("Added to cart");
+                                        } catch (err) {
+                                            toast.dismiss();
+                                            toast.error("Failed to add to cart.");
+                                        }
                                     }
                                 }}
                                 className={`flex items-center justify-center gap-2 py-4 rounded-sm font-bold shadow-md transition-colors text-lg w-full ${hasItem(book.id) ? 'bg-[var(--color-sage)] text-white' : 'bg-[var(--color-ink)] text-white hover:bg-black'}`}
@@ -191,11 +234,11 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                 {/* Similar Books */}
                 {similarBooks.length > 0 && (
                     <div className="mt-20 pt-10 border-t border-[var(--color-ldust)]">
-                        <h2 className="font-display font-black text-2xl text-[var(--color-ink)] mb-6">More in {book.category.replace('_', ' ')}</h2>
+                        <h2 className="font-display font-black text-2xl text-[var(--color-ink)] mb-6">More in {book.category?.replace('_', ' ')}</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                             {similarBooks.map(b => (
                                 <Link href={`/book/${b.id}`} key={b.id} className="bg-white group rounded-sm shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col hover:-translate-y-1 border border-[var(--color-ldust)]">
-                                    <BookCoverImage book={b} />
+                                    <BookCoverImage isbn={b.isbn || ''} title={b.title} category={b.category || (b as any).category_id} coverUrl={(b as any).cover_url || (b as any).coverUrl} />
                                     <div className="p-3">
                                         <h3 className="font-display font-bold text-xs text-[var(--color-ink)] line-clamp-1 mb-1 group-hover:text-[var(--color-rust)]">{b.title}</h3>
                                         <div className="flex items-baseline gap-2">
