@@ -1,6 +1,6 @@
 import { db } from './config'
 import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
-import { calcPricesFirebase } from './firestore'
+import { calcPrices as calcPricesFirebase } from './firestore'
 
 export const seedCategories = async () => {
     const categories = [
