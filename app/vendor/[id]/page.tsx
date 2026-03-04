@@ -50,7 +50,7 @@ export default function VendorDetail({
             setLoading(true);
             try {
                 // Load Vendor
-                const vData = await getVendorById(id);
+                const vData = await getVendorById(id) as any;
                 if (!vData) {
                     setLoading(false);
                     return;
@@ -127,7 +127,7 @@ export default function VendorDetail({
     return (
         <div className="bg-[var(--color-cream)] min-h-screen py-0">
             {/* Vendor Hero */}
-            <div className="relative h-[350px] md:h-[450px] w-full bg-[var(--color-ink)]">
+            <div className="relative h-[280px] md:h-[450px] w-full bg-[var(--color-ink)]">
                 <img
                     src={shopImageBg}
                     alt={vendor.shop_name}

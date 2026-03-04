@@ -194,6 +194,7 @@ function Modal({
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [active, setActive] = useState<SectionId>('dashboard')
   const [time, setTime] = useState(new Date())
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const [orders, setOrders] = useState<AnyDoc[]>([])
   const [books, setBooks] = useState<AnyDoc[]>([])
@@ -652,9 +653,23 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const pendingListings = useMemo(() => listings.filter(l => (l.status || '').toLowerCase() === 'pending'), [listings])
 
   return (
-    <div className="flex flex-row h-screen overflow-hidden bg-[var(--color-cream)]">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-[var(--color-cream)]">
+      {/* MOBILE HEADER */}
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--color-ldust)] bg-[var(--color-paper)] z-30">
+        <RebookIndiaLogo variant="nav" darkBg={false} />
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 rounded-lg border border-[var(--color-ldust)] bg-white text-[var(--color-ink)]"
+        >
+          {isSidebarOpen ? <X size={20} /> : <Grid size={20} />}
+        </button>
+      </header>
+
       {/* LEFT SIDEBAR */}
-      <aside className="w-[260px] h-full flex flex-col shrink-0 flex-none z-20 shadow-xl" style={{ background: INK }}>
+      <aside
+        className={`fixed inset-y-0 left-0 w-[260px] h-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col shrink-0 flex-none z-40 shadow-xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ background: INK }}
+      >
         <div className="p-6">
           <RebookIndiaLogo variant="nav" darkBg />
           <div className="text-[var(--color-amber)] text-[11px] font-bold uppercase tracking-widest mt-2">Admin Panel</div>
@@ -665,7 +680,10 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           {menu.map(item => (
             <button
               key={item.id}
-              onClick={() => setActive(item.id)}
+              onClick={() => {
+                setActive(item.id);
+                setIsSidebarOpen(false);
+              }}
               className={`flex items-center gap-3 px-4 py-3 mx-2 font-bold transition-all duration-200 ${active === item.id
                 ? 'text-white rounded-r-xl border-l-[4px] border-[#E8A020]'
                 : 'text-[var(--color-ldust)] hover:bg-white/5 hover:text-white rounded-xl'
@@ -700,11 +718,11 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         <header className="sticky top-0 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] px-6 py-4 z-10 flex justify-between items-center shrink-0">
           <h1 className="font-display font-black text-[22px] text-[var(--color-ink)] capitalize">{active}</h1>
           <div className="flex items-center gap-6 text-sm font-bold text-[var(--color-dust)]">
-            <div>
+            <div className="hidden sm:block">
               {time.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })} • {time.toLocaleTimeString('en-IN')}
             </div>
-            <div>
-              Pending listings: <span className="font-mono text-[var(--color-rust)]">{stats.pendingListings}</span>
+            <div className="text-xs sm:text-sm">
+              Pending: <span className="font-mono text-[var(--color-rust)]">{stats.pendingListings}</span>
             </div>
           </div>
         </header>
@@ -782,14 +800,14 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           {/* ORDERS (REAL TIME) */}
           {active === 'orders' && (
             <div className="bg-white rounded-2xl border border-[var(--color-ldust)] overflow-hidden max-w-7xl mx-auto">
-              <div className="px-5 py-4 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] flex items-center justify-between">
+              <div className="px-5 py-4 bg-[var(--color-paper)] border-b border-[var(--color-ldust)] flex flex-col sm:flex-row items-center justify-between gap-3">
                 <span className="font-bold">Orders (real time)</span>
                 <input
                   type="text"
                   value={orderSearch}
                   onChange={e => setOrderSearch(e.target.value)}
-                  placeholder="Search by order# or buyer..."
-                  className="border border-[var(--color-ldust)] rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-[var(--color-rust)]"
+                  placeholder="Search order# or buyer..."
+                  className="border border-[var(--color-ldust)] rounded-lg px-3 py-2 text-sm w-full sm:w-64 focus:outline-none focus:border-[var(--color-rust)]"
                 />
               </div>
               <div className="overflow-x-auto">

@@ -5,11 +5,11 @@ import RebookIndiaLogo from './Logo';
 export default function Footer() {
     return (
         <footer className="bg-[var(--color-ink)] text-[var(--color-ldust)] pt-16 pb-8 border-t-[4px] border-[var(--color-rust)]">
-            <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+            <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12 text-center md:text-left">
                 {/* Col 1 */}
-                <div className="lg:pr-8">
+                <div className="lg:pr-8 flex flex-col items-center md:items-start">
                     <RebookIndiaLogo variant="footer" darkBg />
-                    <p className="mt-6 text-sm leading-relaxed">
+                    <p className="mt-6 text-sm leading-relaxed max-w-sm mx-auto md:mx-0">
                         Hyderabad's most trusted second-hand book marketplace. No payment gateways. Transparent earnings. Affordable education for everyone.
                     </p>
                 </div>
@@ -17,7 +17,7 @@ export default function Footer() {
                 {/* Col 2 */}
                 <div>
                     <h4 className="font-display font-bold text-[var(--color-cream)] text-lg mb-4">Browse</h4>
-                    <ul className="space-y-2 text-sm">
+                    <ul className="grid grid-cols-2 md:grid-cols-1 gap-x-4 gap-y-2 text-sm">
                         <li><Link href="/browse?cat=engineering" className="hover:text-[var(--color-amber)] transition-colors">Engineering</Link></li>
                         <li><Link href="/browse?cat=medical" className="hover:text-[var(--color-amber)] transition-colors">Medical MBBS</Link></li>
                         <li><Link href="/browse?cat=jee" className="hover:text-[var(--color-amber)] transition-colors">JEE / NEET</Link></li>
@@ -30,7 +30,7 @@ export default function Footer() {
                 {/* Col 3 */}
                 <div>
                     <h4 className="font-display font-bold text-[var(--color-cream)] text-lg mb-4">Quick Links</h4>
-                    <ul className="space-y-2 text-sm">
+                    <ul className="grid grid-cols-2 md:grid-cols-1 gap-x-4 gap-y-2 text-sm">
                         <li><Link href="/vendors" className="hover:text-[var(--color-amber)] transition-colors">Our Trusted Vendors</Link></li>
                         <li><Link href="/sell" className="hover:text-[var(--color-amber)] transition-colors">Sell Your Books</Link></li>
                         <li><Link href="/#calculator" className="hover:text-[var(--color-amber)] transition-colors">Pricing Calculator</Link></li>
@@ -42,13 +42,13 @@ export default function Footer() {
                 </div>
 
                 {/* Col 4 */}
-                <div>
+                <div className="flex flex-col items-center md:items-start">
                     <h4 className="font-display font-bold text-[var(--color-cream)] text-lg mb-4">Hyderabad Areas</h4>
-                    <p className="text-sm leading-relaxed mb-4">
+                    <p className="text-sm leading-relaxed mb-4 max-w-xs mx-auto md:mx-0">
                         Abids • Koti • Ameerpet • Kukatpally • Dilsukhnagar • LB Nagar • Secunderabad • Banjara Hills • SR Nagar • Himayatnagar
                     </p>
                     <a
-                        href="https://wa.me/919876543210"
+                        href="https://wa.me/916301038443"
                         className="inline-flex items-center gap-2 text-[var(--color-sage)] font-bold text-sm hover:text-white transition-colors"
                     >
                         <span className="w-8 h-8 rounded-full bg-[#25D366] text-white flex items-center justify-center">

@@ -48,15 +48,15 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
 
                     {/* Left: Image */}
                     <div className="md:col-span-4 lg:col-span-3">
-                        <div className="sticky top-24">
-                            <BookCoverImage isbn={book.isbn || ''} title={book.title} category={book.category || (book as any).category_id} coverUrl={(book as any).cover_url || (book as any).coverUrl} className="w-full max-w-[300px] mx-auto md:max-w-full shadow-2xl rounded-sm group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.2)]" />
-                            <div className="mt-4 flex gap-2 justify-center hidden md:flex">
+                        <div className="md:sticky md:top-24">
+                            <BookCoverImage isbn={book.isbn || ''} title={book.title} category={book.category || (book as any).category_id} coverUrl={(book as any).cover_url || (book as any).coverUrl} className="w-full max-w-[280px] md:max-w-full mx-auto shadow-2xl rounded-sm" />
+                            <div className="mt-4 flex gap-2 justify-center">
                                 <button
                                     onClick={() => { toggleWishlist(book.id); toast.success("Wishlist updated"); }}
-                                    className="flex items-center gap-2 text-sm font-bold text-[var(--color-dust)] hover:text-red-500 transition-colors"
+                                    className="flex items-center gap-2 text-sm font-bold text-[var(--color-dust)] hover:text-red-500 transition-colors py-2 px-4 rounded-full bg-white/50 backdrop-blur-sm md:bg-transparent"
                                 >
                                     <Heart size={16} fill={hasWishlist(book.id) ? "currentColor" : "none"} className={hasWishlist(book.id) ? "text-red-500" : ""} />
-                                    {hasWishlist(book.id) ? 'Saved' : 'Save to Wishlist'}
+                                    {hasWishlist(book.id) ? 'Saved' : 'Save'}
                                 </button>
                             </div>
                         </div>
@@ -114,7 +114,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                         </div>
 
                         {/* Buttons */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+                        <div className="flex flex-col sm:flex-row gap-3 pt-4">
                             <button
                                 onClick={async () => {
                                     if (!isLoggedIn || !user) {
@@ -142,7 +142,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                                         toast.error("Failed to process cart.");
                                     }
                                 }}
-                                className="flex items-center justify-center bg-[var(--color-rust)] text-white hover:bg-[#A93C23] py-4 rounded-sm font-bold shadow-md transition-colors text-lg w-full"
+                                className="order-1 sm:order-2 flex items-center justify-center bg-[var(--color-rust)] text-white hover:bg-[#A93C23] py-4 rounded-lg font-bold shadow-md transition-all text-lg w-full active:scale-95"
                             >
                                 Place Order Request
                             </button>
@@ -176,7 +176,7 @@ export default function BookDetail({ params }: { params: Promise<{ id: string }>
                                         }
                                     }
                                 }}
-                                className={`flex items-center justify-center gap-2 py-4 rounded-sm font-bold shadow-md transition-colors text-lg w-full ${hasItem(book.id) ? 'bg-[var(--color-sage)] text-white' : 'bg-[var(--color-ink)] text-white hover:bg-black'}`}
+                                className={`order-2 sm:order-1 flex items-center justify-center gap-2 py-4 rounded-lg font-bold shadow-sm transition-all text-lg w-full active:scale-95 ${hasItem(book.id) ? 'bg-[var(--color-sage)] text-white' : 'bg-[var(--color-ink)] text-white hover:bg-black'}`}
                             >
                                 {hasItem(book.id) ? <><Check size={20} /> In Cart</> : <><ShoppingCart size={20} /> Add to Cart</>}
                             </button>

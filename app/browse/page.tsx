@@ -389,47 +389,39 @@ function BrowseContent() {
             <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
 
                 {/* Page heading */}
-                <div style={{ marginBottom: 24 }}>
-                    <h1 style={{
-                        fontFamily: 'Playfair Display, serif', fontSize: 28,
-                        fontWeight: 900, color: '#1A1208', marginBottom: 4,
-                    }}>
+                <div className="mb-6 md:mb-8 text-center md:text-left">
+                    <h1 className="font-display font-black text-3xl md:text-4xl text-[var(--color-ink)] mb-2">
                         Browse Books
                     </h1>
                     {!loading && (
-                        <p style={{ color: '#8B7355', fontFamily: 'DM Sans, sans-serif', fontSize: 14 }}>
-                            Showing <strong style={{ color: '#1A1208' }}>{filtered.length}</strong> book{filtered.length !== 1 ? 's' : ''} available in Hyderabad
+                        <p className="text-[var(--color-dust)] font-body text-sm md:text-base">
+                            Showing <strong className="text-[var(--color-ink)]">{filtered.length}</strong> books available in Hyderabad
                         </p>
                     )}
                 </div>
 
                 {/* Top bar: Sort + Mobile filter button */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginBottom: 24 }}>
-                    <select
-                        value={sort}
-                        onChange={e => setSort(e.target.value)}
-                        style={{
-                            padding: '10px 14px', border: '1px solid #D4C5A9',
-                            borderRadius: 6, fontSize: 13, fontWeight: 700,
-                            fontFamily: 'DM Sans, sans-serif', background: 'white', color: '#1A1208',
-                            outline: 'none', cursor: 'pointer',
-                        }}
-                    >
-                        {SORT_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                    </select>
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-8">
                     <button
                         onClick={() => setMobileFiltersOpen(true)}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '10px 16px', background: '#1A1208', color: 'white',
-                            border: 'none', borderRadius: 6, cursor: 'pointer',
-                            fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: 13,
-                        }}
+                        className="md:hidden flex items-center justify-center gap-2 bg-[var(--color-ink)] text-white py-4 rounded-xl font-bold transition-all shadow-lg active:scale-95"
                     >
-                        <SlidersHorizontal size={16} /> Filters
+                        <SlidersHorizontal size={20} />
+                        Filter & Sort Results
                     </button>
+
+                    <div className="hidden md:flex items-center gap-3">
+                        <span className="text-sm font-bold text-[var(--color-dust)]">Sort By:</span>
+                        <select
+                            value={sort}
+                            onChange={e => setSort(e.target.value)}
+                            className="bg-white border border-[var(--color-ldust)] rounded-lg px-4 py-2 text-sm font-bold focus:outline-none focus:border-[var(--color-rust)] cursor-pointer"
+                        >
+                            {SORT_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
@@ -495,11 +487,7 @@ function BrowseContent() {
                         )}
 
                         {!loading && !error && filtered.length > 0 && (
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                                gap: 16,
-                            }}>
+                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                                 {filtered.map(book => {
                                     const ourPrice = book.our_price ?? book.ourPrice ?? Math.round(Number(book.mrp || 0) * 0.5)
                                     const savings = book.savings ?? Math.round(Number(book.mrp || 0) * 0.5)

@@ -285,47 +285,21 @@ export default function HomePage() {
     <main style={{ minHeight: '100vh', background: '#FAF6EC' }}>
 
       {/* HERO */}
-      <section style={{ background: '#1A1208', padding: '60px 24px', textAlign: 'center' }}>
-        <p style={{
-          color: '#E8A020', fontSize: 13,
-          fontFamily: 'DM Sans, sans-serif',
-          letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12,
-        }}>
+      <section className="bg-[var(--color-ink)] py-12 md:py-24 px-4 text-center">
+        <p className="text-[var(--color-amber)] text-[11px] md:text-sm font-body tracking-[0.2em] uppercase mb-4">
           Hyderabad's Trusted Second-Hand Book Marketplace
         </p>
-        <h1 style={{
-          fontFamily: 'Playfair Display, serif',
-          fontSize: 'clamp(28px, 5vw, 52px)',
-          fontWeight: 900, color: '#F5EFE0',
-          lineHeight: 1.2, maxWidth: 700, margin: '0 auto 16px',
-        }}>
-          Why Should{' '}
-          <span style={{ color: '#E8A020' }}>Expensive Books</span>
-          {' '}Stop Your Dreams?
+        <h1 className="font-display text-3xl md:text-5xl lg:text-6xl font-black text-[var(--color-cream)] leading-tight max-w-4xl mx-auto mb-6">
+          Why Should <span className="text-[var(--color-amber)]">Expensive Books</span> Stop Your Dreams?
         </h1>
-        <p style={{
-          color: '#D4C5A9', fontSize: 16,
-          fontFamily: 'DM Sans, sans-serif',
-          maxWidth: 500, margin: '0 auto 32px', lineHeight: 1.6,
-        }}>
-          Get 50% off MRP on every book. 15 trusted vendors. 35+ books available in Hyderabad.
+        <p className="text-[var(--color-ldust)] text-base md:text-xl font-body max-w-2xl mx-auto mb-10 leading-relaxed">
+          Get 50% off MRP on every book. 15 trusted vendors. Thousands of books available in Hyderabad.
         </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link href="/browse" style={{
-            background: '#C94A2D', color: 'white',
-            padding: '14px 28px', borderRadius: 12,
-            textDecoration: 'none', fontFamily: 'DM Sans, sans-serif',
-            fontWeight: 600, fontSize: 15,
-          }}>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <Link href="/browse" className="w-full sm:w-auto bg-[var(--color-rust)] text-white py-4 px-8 rounded-xl font-bold text-base hover:bg-[#A93C23] transition-all shadow-lg hover:shadow-rust/20">
             Browse Books in Hyderabad
           </Link>
-          <Link href="/sell" style={{
-            background: 'transparent', color: '#F5EFE0',
-            padding: '14px 28px', borderRadius: 12,
-            textDecoration: 'none', fontFamily: 'DM Sans, sans-serif',
-            fontWeight: 600, fontSize: 15,
-            border: '1px solid #F5EFE0',
-          }}>
+          <Link href="/sell" className="w-full sm:w-auto bg-transparent text-[var(--color-cream)] py-4 px-8 rounded-xl font-bold text-base border-2 border-[var(--color-cream)] hover:bg-[var(--color-cream)] hover:text-[var(--color-ink)] transition-all">
             Sell Your Books
           </Link>
         </div>
@@ -349,22 +323,15 @@ export default function HomePage() {
 
         {/* CATEGORY TABS */}
         {!loading && books.length > 0 && (
-          <div style={{
-            display: 'flex', gap: 8, flexWrap: 'wrap',
-            justifyContent: 'center', marginBottom: 32,
-          }}>
+          <div className="flex overflow-x-auto pb-4 mb-8 no-scrollbar md:flex-wrap md:justify-center gap-3">
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setActiveTab(cat)}
-                style={{
-                  padding: '8px 18px', borderRadius: 24, border: 'none',
-                  cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
-                  fontSize: 13, fontWeight: 600,
-                  background: activeTab === cat ? '#C94A2D' : '#F5EFE0',
-                  color: activeTab === cat ? 'white' : '#1A1208',
-                  transition: 'all 0.2s',
-                }}
+                className={`flex-shrink-0 px-6 py-2 rounded-full font-bold text-xs md:text-sm font-body transition-all min-h-[44px] ${activeTab === cat
+                    ? 'bg-[var(--color-rust)] text-white shadow-md'
+                    : 'bg-[var(--color-ldust)]/30 text-[var(--color-ink)] hover:bg-[var(--color-ldust)]/50'
+                  }`}
               >
                 {categoryLabel(cat)}
               </button>
@@ -423,11 +390,7 @@ export default function HomePage() {
 
         {/* BOOKS GRID */}
         {!loading && !error && filtered.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))',
-            gap: 16,
-          }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
             {filtered.map((book: any) => {
               const ourPrice = book.our_price ?? Math.round(Number(book.mrp || 0) * 0.5)
               const savings = book.savings ?? Math.round(Number(book.mrp || 0) * 0.5)

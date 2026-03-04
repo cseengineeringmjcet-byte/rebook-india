@@ -21,18 +21,39 @@
   --animate-bdot: bdot 1.5s ease-in-out infinite;
 
   @keyframes ticker {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+    0% {
+      transform: translateX(0);
+    }
+
+    100% {
+      transform: translateX(-50%);
+    }
   }
-  
+
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-6px);
+    }
   }
 
   @keyframes bdot {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.5; }
+
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    50% {
+      transform: scale(1.3);
+      opacity: 0.5;
+    }
   }
 }
 
@@ -49,4 +70,50 @@ body {
 
 .ticker-wrap:hover .ticker-inner {
   animation-play-state: paused;
+}
+
+/* ══════════════════════════════════════════
+   GLOBAL MOBILE FIXES
+   ══════════════════════════════════════════ */
+@layer base {
+
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+  }
+
+  /* Force minimum font size on mobile to prevent zoom on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  @media (max-width: 767px) {
+    body {
+      font-size: 14px;
+    }
+
+    /* Minimum tap targets */
+    button,
+    a.button,
+    input[type="button"],
+    input[type="submit"] {
+      min-height: 44px;
+    }
+
+    input,
+    select,
+    textarea {
+      min-height: 44px;
+    }
+  }
+}
+
+/* Utility for responsive image scaling */
+img {
+  max-width: 100%;
+  height: auto;
 }

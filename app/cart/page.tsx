@@ -207,7 +207,8 @@ export default function CartPage() {
                     </div>
 
                     <div className="lg:col-span-1">
-                        <div className="bg-white rounded-sm shadow-sm border border-[var(--color-ldust)] p-6 sticky top-24">
+                        {/* Summary for Desktop */}
+                        <div className="bg-white rounded-sm shadow-sm border border-[var(--color-ldust)] p-6 sticky top-24 hidden lg:block">
                             <h2 className="font-display font-bold text-xl text-[var(--color-ink)] mb-6 border-b border-[var(--color-ldust)] pb-4">Order Summary</h2>
 
                             <div className="space-y-4 mb-6">
@@ -237,8 +238,28 @@ export default function CartPage() {
                                 Proceed to Checkout <ArrowRight size={20} />
                             </Link>
                         </div>
+
+                        {/* Summary for Mobile (Not sticky yet, just the details bottom) */}
+                        <div className="lg:hidden mt-8 bg-white p-6 rounded-sm border border-[var(--color-ldust)] mb-20">
+                            <div className="flex justify-between items-center">
+                                <span className="font-bold text-[var(--color-ink)]">Subtotal ({count} items)</span>
+                                <span className="font-mono font-black text-[var(--color-sage)] text-xl">₹{total}</span>
+                            </div>
+                            <p className="text-xs text-[var(--color-rust)] mt-1 font-bold">You are saving ₹{savings} on this order!</p>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            {/* STICKY BOTTOM BAR FOR MOBILE */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[var(--color-ldust)] p-4 z-30 lg:hidden flex items-center justify-between shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-[var(--color-dust)] uppercase tracking-wider">Net Amount</span>
+                    <span className="font-mono font-black text-[var(--color-sage)] text-xl">₹{total}</span>
+                </div>
+                <Link href="/checkout" className="bg-[var(--color-rust)] text-white px-8 py-3 rounded-lg font-bold shadow-md active:scale-95 transition-all text-sm flex items-center gap-2">
+                    Checkout <ArrowRight size={16} />
+                </Link>
             </div>
         </div>
     );

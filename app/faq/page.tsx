@@ -125,7 +125,7 @@ function Accordion({ q, a }: { q: string, a: string }) {
         <div className="border border-[var(--color-ldust)] rounded-md mb-4 bg-white overflow-hidden shadow-sm transition-all">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full text-left p-5 flex items-center justify-between focus:outline-none hover:bg-slate-50 transition-colors"
+                className="w-full text-left p-4 md:p-5 flex items-center justify-between focus:outline-none hover:bg-slate-50 transition-colors min-h-[48px]"
             >
                 <span className="font-bold text-[var(--color-ink)] text-sm md:text-base leading-snug">{q}</span>
                 <Plus
@@ -148,26 +148,26 @@ export default function FAQPage() {
     return (
         <main className="min-h-screen bg-[var(--color-cream)]">
             {/* HERO SECTION */}
-            <section className="bg-[var(--color-ink)] py-16 md:py-24 px-6 text-center">
+            <section className="bg-[var(--color-ink)] py-12 md:py-24 px-4 text-center">
                 <div className="max-w-3xl mx-auto">
-                    <h1 className="font-display font-bold text-4xl md:text-5xl text-[var(--color-cream)] mb-4 leading-tight">
+                    <h1 className="font-display font-bold text-3xl md:text-5xl text-[var(--color-cream)] mb-4 leading-tight">
                         Frequently Asked Questions
                     </h1>
-                    <p className="text-[var(--color-ldust)] text-lg md:text-xl">
+                    <p className="text-[var(--color-ldust)] text-base md:text-xl">
                         Everything you need to know about Rebook India
                     </p>
                 </div>
             </section>
 
             {/* FAQ CONTENT */}
-            <section className="max-w-4xl mx-auto px-6 py-16 md:py-24">
-                <div className="space-y-16">
+            <section className="max-w-4xl mx-auto px-4 py-12 md:py-24">
+                <div className="space-y-12 md:space-y-16">
                     {FAQ_DATA.map((section, idx) => (
                         <div key={idx}>
-                            <h2 className="font-display font-bold text-2xl text-[var(--color-ink)] mb-8 border-b-2 border-[var(--color-rust)] pb-2 inline-block">
+                            <h2 className="font-display font-bold text-xl md:text-2xl text-[var(--color-ink)] mb-6 md:mb-8 border-b-2 border-[var(--color-rust)] pb-2 inline-block">
                                 {section.category}
                             </h2>
-                            <div className="space-y-4">
+                            <div className="space-y-3 md:space-y-4">
                                 {section.items.map((item, i) => (
                                     <Accordion key={i} q={item.q} a={item.a} />
                                 ))}

@@ -131,7 +131,7 @@ export default function VendorsPage() {
                                         href={`/vendor/${v.id}`}
                                         className="block relative overflow-hidden"
                                     >
-                                        <div className="h-[200px] relative">
+                                        <div className="h-[140px] md:h-[200px] relative">
                                             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors z-10" />
                                             <img
                                                 src={imgSrc}

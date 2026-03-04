@@ -249,8 +249,22 @@ export default function CheckoutPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <div className="bg-white p-6 md:p-8 rounded-sm shadow-sm border border-[var(--color-ldust)]">
+          {/* Order Summary at TOP on mobile */}
+          <div className="lg:hidden order-1">
+            <div className="bg-white rounded-sm shadow-sm border border-[var(--color-ldust)] p-6">
+              <h3 className="font-display font-bold text-xl text-[var(--color-ink)] mb-4 border-b border-[var(--color-ldust)] pb-2">
+                Cart Summary
+              </h3>
+              <div className="flex justify-between items-center py-2">
+                <span className="font-bold text-[var(--color-ink)] text-lg">Total Amount</span>
+                <span className="font-mono font-black text-[var(--color-sage)] text-2xl">₹{total}</span>
+              </div>
+              <p className="text-xs text-[var(--color-rust)] font-bold">You are saving ₹{savings} on this order!</p>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 order-2">
+            <div className="bg-white p-6 md:p-8 rounded-sm shadow-sm border border-[var(--color-ldust)] mb-20 md:mb-0">
               <h2 className="font-display font-black text-2xl text-[var(--color-ink)] mb-6 border-b border-[var(--color-ldust)] pb-4">
                 {step === 1 ? "Delivery Details" : "Review Details"}
               </h2>
@@ -357,9 +371,9 @@ export default function CheckoutPage() {
 
                   <button
                     onClick={() => setStep(2)}
-                    className="w-full bg-[var(--color-ink)] hover:bg-[var(--color-rust)] text-white px-8 py-4 rounded-sm font-bold transition-colors mt-4 text-lg"
+                    className="w-full bg-[var(--color-ink)] hover:bg-[var(--color-rust)] text-white px-8 py-4 rounded-sm font-bold transition-colors mt-4 text-lg md:relative fixed bottom-0 left-0 right-0 z-30 rounded-none md:rounded-sm md:block shadow-[0_-4px_12px_rgba(0,0,0,0.1)] md:shadow-none"
                   >
-                    Proceed
+                    Proceed to Review
                   </button>
                 </div>
               )}
@@ -411,16 +425,16 @@ export default function CheckoutPage() {
                   <button
                     onClick={submitOrder}
                     disabled={submitting}
-                    className="w-full flex items-center justify-center gap-2 bg-[var(--color-rust)] hover:bg-[#A93C23] text-white py-4 rounded-sm font-bold shadow-md transition-colors text-lg disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 bg-[var(--color-rust)] hover:bg-[#A93C23] text-white py-4 rounded-sm font-bold shadow-md transition-colors text-lg disabled:opacity-50 md:relative fixed bottom-0 left-0 right-0 z-30 rounded-none md:rounded-sm shadow-[0_-4px_12px_rgba(0,0,0,0.1)] md:shadow-none"
                   >
-                    {submitting ? "Placing Order..." : "Place Order"}
+                    {submitting ? "Placing Order..." : "Confirm & Place Order"}
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 hidden lg:block order-3">
             <div className="bg-white rounded-sm shadow-sm border border-[var(--color-ldust)] p-6 sticky top-24">
               <h3 className="font-display font-bold text-xl text-[var(--color-ink)] mb-6 border-b border-[var(--color-ldust)] pb-4">
                 Cart Summary

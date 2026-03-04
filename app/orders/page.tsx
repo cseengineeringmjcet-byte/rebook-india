@@ -152,20 +152,20 @@ export default function OrdersPage() {
                                                 <div className="font-mono font-bold text-[var(--color-rust)]">₹{order.savings || 0}</div>
                                             </div>
 
-                                            <div className="flex flex-wrap gap-2 mt-4 w-full md:w-auto">
+                                            <div className="flex flex-col sm:flex-row gap-3 mt-6 w-full md:w-auto">
                                                 <button
                                                     onClick={() => setSelectedOrder(order)}
-                                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-[var(--color-ldust)] hover:border-[var(--color-ink)] text-[var(--color-ink)] px-4 py-2 rounded-sm font-bold text-xs transition-colors"
+                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-[var(--color-ldust)] hover:border-[var(--color-ink)] text-[var(--color-ink)] px-6 py-3 rounded-sm font-bold text-sm transition-colors shadow-sm"
                                                 >
-                                                    <Eye size={14} /> View Details
+                                                    <Eye size={16} /> View Details
                                                 </button>
 
                                                 {(order.status || "").toLowerCase() === "placed" && (
                                                     <button
                                                         onClick={() => handleCancel(order.id)}
-                                                        className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-4 py-2 rounded-sm font-bold text-xs transition-colors shadow-sm"
+                                                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-6 py-3 rounded-sm font-bold text-sm transition-colors shadow-sm"
                                                     >
-                                                        <XCircle size={14} /> Cancel Order
+                                                        <XCircle size={16} /> Cancel Order
                                                     </button>
                                                 )}
                                             </div>
